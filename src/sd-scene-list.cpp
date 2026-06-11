@@ -60,15 +60,36 @@ public:
 			return;
 		}
 
-		const QString name = index.data(Qt::DisplayRole).toString().trimmed();
+		/* Strip leading/trailing dash-like padding so an adopted manual
+		 * divider ("------ME1------") shows a clean centered label. */
+		QString name = index.data(Qt::DisplayRole).toString().trimmed();
 		const bool lineOnly = label_is_plain_line(name.toUtf8().constData());
+		if (!lineOnly) {
+			while (!name.isEmpty() && (name.front() == '-' || name.front() == '_' ||
+						   name.front() == QChar(0x2500) || name.front() == QChar(0x2014) ||
+						   name.front() == ' '))
+				name.remove(0, 1);
+			while (!name.isEmpty() && (name.back() == '-' || name.back() == '_' ||
+						   name.back() == QChar(0x2500) || name.back() == QChar(0x2014) ||
+						   name.back() == ' '))
+				name.chop(1);
+		}
 
 		QColor color(index.data(RoleColor).toString());
-		if (!color.isValid())
+		const bool hasAccent = color.isValid();
+		if (!hasAccent)
 			color = opt.palette.color(QPalette::Disabled, QPalette::Text);
 
 		p->save();
-		p->setPen(QPen(color, 1));
+		p->setRenderHint(QPainter::Antialiasing, true);
+
+		/* Subtle full-row background so a divider reads as a separator,
+		 * not as a clickable scene. Tinted toward the accent if set. */
+		QColor bg = hasAccent ? color : opt.palette.color(QPalette::Highlight);
+		bg.setAlpha(hasAccent ? 38 : 28);
+		p->fillRect(opt.rect, bg);
+
+		p->setPen(QPen(color, lineOnly ? 2 : 1));
 
 		const QRect r = opt.rect.adjusted(8, 0, -8, 0);
 		const int y = r.center().y();
@@ -78,6 +99,7 @@ public:
 		} else {
 			QFont f = opt.font;
 			f.setBold(true);
+			f.setCapitalization(QFont::AllUppercase);
 			if (f.pointSizeF() > 0)
 				f.setPointSizeF(f.pointSizeF() * 0.9);
 			p->setFont(f);
@@ -87,10 +109,11 @@ public:
 			const int tw = fm.horizontalAdvance(label);
 			const int tx = r.center().x() - tw / 2;
 
-			if (tx - 6 > r.left())
-				p->drawLine(r.left(), y, tx - 6, y);
-			if (tx + tw + 6 < r.right())
-				p->drawLine(tx + tw + 6, y, r.right(), y);
+			if (tx - 8 > r.left())
+				p->drawLine(r.left(), y, tx - 8, y);
+			if (tx + tw + 8 < r.right())
+				p->drawLine(tx + tw + 8, y, r.right(), y);
+			p->setPen(hasAccent ? color : opt.palette.color(QPalette::Text));
 			p->drawText(QRect(tx, opt.rect.top(), tw, opt.rect.height()), Qt::AlignCenter, label);
 		}
 		p->restore();
@@ -160,6 +183,12 @@ bool move_scene_row(int from, int to)
 	QMetaObject::invokeMethod(s_list, "scenesReordered");
 	obs_frontend_save();
 	return true;
+}
+
+void refresh_multiview()
+{
+	if (s_list)
+		QMetaObject::invokeMethod(s_list, "scenesReordered");
 }
 
 static void unhook_scene_list()

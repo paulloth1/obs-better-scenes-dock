@@ -22,9 +22,20 @@ namespace sd {
  * keeps them robust against renames — no magic name prefixes needed. */
 constexpr const char *kDividerKey = "scene_dividers_marker";
 constexpr const char *kColorKey = "scene_dividers_color";
+/* OBS' own native per-scene flag (Scenes context menu → "Show in Multiview").
+ * Default true; we set it false on dividers so the empty marker scenes never
+ * occupy a multiview slot. */
+constexpr const char *kMultiviewKey = "show_in_multiview";
 
 bool is_divider(obs_source_t *source);
 bool is_divider_by_name(const char *name);
+
+/* Marks/unmarks an existing scene as a divider (adopt / release). Adopting
+ * also hides it from the multiview; releasing restores multiview visibility
+ * and clears the accent color. Returns false if the name is not a scene. */
+bool set_divider_by_name(const char *name, bool on);
+
+void set_show_in_multiview(obs_source_t *source, bool show);
 
 /* Accent color as "#RRGGBB"; empty string = theme default. */
 std::string divider_color(obs_source_t *source);

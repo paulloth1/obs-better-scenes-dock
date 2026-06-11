@@ -51,6 +51,7 @@ public:
 		list_->setSelectionMode(QAbstractItemView::SingleSelection);
 
 		addBtn_ = new QPushButton(obs_module_text("SceneDividers.Add"), this);
+		convertBtn_ = new QPushButton(obs_module_text("SceneDividers.Convert"), this);
 		renameBtn_ = new QPushButton(obs_module_text("SceneDividers.Rename"), this);
 		colorBtn_ = new QPushButton(obs_module_text("SceneDividers.Color"), this);
 		removeBtn_ = new QPushButton(obs_module_text("SceneDividers.Remove"), this);
@@ -64,22 +65,26 @@ public:
 
 		auto *row1 = new QHBoxLayout();
 		row1->addWidget(addBtn_);
-		row1->addWidget(renameBtn_);
-		row1->addWidget(colorBtn_);
+		row1->addWidget(convertBtn_);
 		auto *row2 = new QHBoxLayout();
+		row2->addWidget(renameBtn_);
+		row2->addWidget(colorBtn_);
 		row2->addWidget(removeBtn_);
-		row2->addStretch();
-		row2->addWidget(upBtn_);
-		row2->addWidget(downBtn_);
+		auto *row3 = new QHBoxLayout();
+		row3->addStretch();
+		row3->addWidget(upBtn_);
+		row3->addWidget(downBtn_);
 
 		auto *layout = new QVBoxLayout(this);
 		layout->addWidget(hint);
 		layout->addWidget(list_);
 		layout->addLayout(row1);
 		layout->addLayout(row2);
+		layout->addLayout(row3);
 
 		connect(list_, &QListWidget::itemSelectionChanged, this, [this]() { updateButtons(); });
 		connect(addBtn_, &QPushButton::clicked, this, [this]() { addDivider(); });
+		connect(convertBtn_, &QPushButton::clicked, this, [this]() { toggleConvert(); });
 		connect(renameBtn_, &QPushButton::clicked, this, [this]() { renameDivider(); });
 		connect(colorBtn_, &QPushButton::clicked, this, [this]() { pickColor(); });
 		connect(removeBtn_, &QPushButton::clicked, this, [this]() { removeDivider(); });
@@ -120,7 +125,7 @@ public:
 
 private:
 	QListWidget *list_;
-	QPushButton *addBtn_, *renameBtn_, *colorBtn_, *removeBtn_, *upBtn_, *downBtn_;
+	QPushButton *addBtn_, *convertBtn_, *renameBtn_, *colorBtn_, *removeBtn_, *upBtn_, *downBtn_;
 
 	int selectedRow() const { return list_->currentRow(); }
 
@@ -132,12 +137,29 @@ private:
 
 	void updateButtons()
 	{
+		const bool hasSel = list_->currentItem() != nullptr;
 		const bool divider = selectedIsDivider();
+		convertBtn_->setEnabled(hasSel);
+		convertBtn_->setText(divider ? obs_module_text("SceneDividers.ConvertBack")
+					     : obs_module_text("SceneDividers.Convert"));
 		renameBtn_->setEnabled(divider);
 		colorBtn_->setEnabled(divider);
 		removeBtn_->setEnabled(divider);
 		upBtn_->setEnabled(divider && selectedRow() > 0);
 		downBtn_->setEnabled(divider && selectedRow() >= 0 && selectedRow() < list_->count() - 1);
+	}
+
+	void toggleConvert()
+	{
+		QListWidgetItem *item = list_->currentItem();
+		if (!item)
+			return;
+		const QString name = item->text();
+		set_divider_by_name(name.toUtf8().constData(), !selectedIsDivider());
+		restyle_scene_list();
+		refresh_multiview();
+		obs_frontend_save();
+		refreshSoon();
 	}
 
 	void refreshSoon()
@@ -176,6 +198,7 @@ private:
 			}
 		}
 		restyle_scene_list();
+		refresh_multiview();
 		obs_frontend_save();
 		refreshSoon();
 	}

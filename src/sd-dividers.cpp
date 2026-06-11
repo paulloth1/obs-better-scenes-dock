@@ -32,6 +32,34 @@ bool is_divider_by_name(const char *name)
 	return marker;
 }
 
+void set_show_in_multiview(obs_source_t *source, bool show)
+{
+	if (!source)
+		return;
+	obs_data_t *priv = obs_source_get_private_settings(source);
+	obs_data_set_bool(priv, kMultiviewKey, show);
+	obs_data_release(priv);
+}
+
+bool set_divider_by_name(const char *name, bool on)
+{
+	obs_source_t *source = obs_get_source_by_name(name);
+	if (!source || obs_source_get_type(source) != OBS_SOURCE_TYPE_SCENE) {
+		obs_source_release(source);
+		return false;
+	}
+	obs_data_t *priv = obs_source_get_private_settings(source);
+	obs_data_set_bool(priv, kDividerKey, on);
+	/* Hide dividers from the multiview; restore visibility + drop the
+	 * accent color when a scene is turned back into a normal scene. */
+	obs_data_set_bool(priv, kMultiviewKey, on ? false : true);
+	if (!on)
+		obs_data_set_string(priv, kColorKey, "");
+	obs_data_release(priv);
+	obs_source_release(source);
+	return true;
+}
+
 std::string divider_color(obs_source_t *source)
 {
 	if (!source)
@@ -106,6 +134,8 @@ std::string create_divider(const char *label)
 	obs_source_t *source = obs_scene_get_source(scene);
 	obs_data_t *priv = obs_source_get_private_settings(source);
 	obs_data_set_bool(priv, kDividerKey, true);
+	/* Keep the empty marker scene out of the multiview (OBS' native flag). */
+	obs_data_set_bool(priv, kMultiviewKey, false);
 	obs_data_release(priv);
 	/* The frontend's source_create handler already attached the scene to
 	 * the scene list (which holds its own reference), so ours can go. */

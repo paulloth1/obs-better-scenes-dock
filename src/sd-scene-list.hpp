@@ -27,6 +27,11 @@ QListWidget *scene_list_widget();
 void restyle_scene_list();
 void schedule_restyle();
 
+/* Forces OBS to rebuild its multiview projectors so a freshly changed
+ * "show_in_multiview" flag takes effect immediately (OBS reacts to the
+ * SceneTree::scenesReordered signal with UpdateMultiviewProjectors). */
+void refresh_multiview();
+
 /* Moves a row inside the native list (divider rows only — moving a normal
  * scene this way would fight with OBS' own selection handling). */
 bool move_scene_row(int from, int to);

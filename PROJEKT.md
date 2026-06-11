@@ -27,7 +27,8 @@ GitHub-Repo (geplant): **obs-scene-dividers** · Anzeigename: **Scene Dividers**
 | **Umfang v1** | **Nur Trenner**, keine einklappbaren Gruppen | Kleiner, sicherer Start; Gruppen (Einklappen via `setRowHidden`) als mögliche v2. |
 | **Mechanik** | **Marker-Szenen**: jeder Trenner ist eine echte, leere Szene | OBS übernimmt Persistenz, Reihenfolge und Listen-Lebenszyklus gratis; wir stylen nur. Sichtbar in obs-websocket/Streamdeck (dokumentierte Einschränkung). |
 | **Erkennung** | **Private Settings** der Szenen-Source (`scene_dividers_marker`, `scene_dividers_color`) | libobs speichert `private_settings` pro Source in der Szenensammlung (obs.c) → überlebt Neustart/Collection-Wechsel, robust gegen Umbenennen. Kein Namens-Präfix nötig. |
-| **Bedienung** | **Tools-Menü** → Verwaltungsdialog (hinzufügen/umbenennen/Farbe/entfernen/▲▼) | Trenner sind in der Liste bewusst nicht selektierbar, daher läuft Verwaltung über den Dialog. Kontextmenü/Hotkey ggf. später. |
+| **Bedienung** | **Tools-Menü** → Verwaltungsdialog (hinzufügen/**umwandeln**/umbenennen/Farbe/entfernen/▲▼) | Trenner sind in der Liste bewusst nicht selektierbar, daher läuft Verwaltung über den Dialog. „Umwandeln" adoptiert bestehende Szenen als Trenner (und zurück). Kontextmenü/Hotkey ggf. später. |
+| **Multiview** | Trenner werden **automatisch aus dem Multiview ausgeblendet** | Setzt OBS' natives Private-Setting `show_in_multiview=false` (sonst belegt die leere Marker-Szene einen Multiview-Slot). Sofort-Refresh über das `scenesReordered`-Signal → `UpdateMultiviewProjectors`. |
 | **Aussehen** | Linie + **zentrierte Beschriftung** + **Akzentfarbe** pro Trenner | Eigener `QStyledItemDelegate`; Label = Szenenname; nur Striche/leer = reine Linie. |
 | **Plattform** | Erstmal **nur macOS** (Dev-Maschine); Win/Linux später via Template-CI | dev/-Ninja-Build wie bei 2ME; offizieller Template-Build bleibt für CI/Release. |
 | **OBS/Qt** | OBS 32.1.2 (lokal installiert), Qt 6.8.3 (OBS-Runtime) | Header aus obs-studio-32.1.2-Tarball; Qt nur Header/MOC, nicht gelinkt (dynamic_lookup). |
@@ -121,6 +122,16 @@ dev/                    Schneller Ninja-Build ohne Xcode (siehe dev/README.md)
 
 ## 5. Fortschrittslog
 
+- **2026-06-11** — **Nach 1. Nutzer-Feedback.** (1) Trenner werden jetzt per
+  `show_in_multiview=false` (OBS-natives Private-Setting, verifiziert in
+  `frontend/components/Multiview.cpp:163` + `OBSBasic_Scenes.cpp:595`) automatisch
+  aus dem Multiview ausgeblendet; Sofort-Refresh via `scenesReordered`-Signal, da
+  `AddScene` das Multiview baut, bevor unser Flag steht. (2) **Umwandeln-Funktion**:
+  bestehende Szenen lassen sich als Trenner adoptieren (und zurück) — löst, dass
+  die alten, manuell angelegten Strich-Szenen des Nutzers (`------ME1------`) keine
+  Marker hatten und daher nicht bearbeitbar waren. (3) Delegate optisch deutlicher
+  (dezenter Hintergrund, dickere Linie bei reinen Linien, Akzentfarbe, Label
+  uppercase + Strich-Padding entfernt). Baut & lädt. *Offen: erneuter Nutzertest.*
 - **2026-06-11** — Projekt initialisiert. Ansatz entschieden (native Liste statt
   eigenem Dock; Abgrenzung zu obs-scene-tree-view), Mechanik Marker-Szenen +
   Private Settings, v1 nur Trenner (Label + Farbe), Bedienung über Tools-Menü,
