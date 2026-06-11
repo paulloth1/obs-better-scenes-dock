@@ -54,7 +54,7 @@ public:
 	/* Structural edits. Return the new/affected node (or nullptr). */
 	Node *add_folder(Node *parent, const std::string &name);
 	Node *add_divider(Node *parent, const std::string &name);
-	bool remove_node(Node *node);                 // folders/dividers; scene children move to parent
+	bool remove_node(Node *node); // folders/dividers; scene children move to parent
 	bool move_node(Node *node, Node *newParent, int index);
 	bool move_within_parent(Node *node, int delta); // -1 = up, +1 = down
 

@@ -108,7 +108,8 @@ public:
 					p->drawLine(r.left(), y, tx - 8, y);
 				if (tx + tw + 8 < r.right())
 					p->drawLine(tx + tw + 8, y, r.right(), y);
-				p->drawText(QRect(tx, option.rect.top(), tw, option.rect.height()), Qt::AlignCenter, el);
+				p->drawText(QRect(tx, option.rect.top(), tw, option.rect.height()), Qt::AlignCenter,
+					    el);
 			}
 			p->restore();
 			return;
@@ -164,8 +165,10 @@ public:
 		layout->addLayout(toolbar);
 
 		connect(tree_, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem *it, int) { activate(it); });
-		connect(tree_, &QTreeWidget::itemExpanded, this, [this](QTreeWidgetItem *it) { setCollapsed(it, false); });
-		connect(tree_, &QTreeWidget::itemCollapsed, this, [this](QTreeWidgetItem *it) { setCollapsed(it, true); });
+		connect(tree_, &QTreeWidget::itemExpanded, this,
+			[this](QTreeWidgetItem *it) { setCollapsed(it, false); });
+		connect(tree_, &QTreeWidget::itemCollapsed, this,
+			[this](QTreeWidgetItem *it) { setCollapsed(it, true); });
 		connect(tree_, &QTreeWidget::customContextMenuRequested, this,
 			[this](const QPoint &pos) { showMenu(pos); });
 		connect(tree_, &QTreeWidget::itemSelectionChanged, this, [this]() { updateToolbar(); });
@@ -264,8 +267,8 @@ private:
 		pen.setCapStyle(Qt::RoundCap);
 		p.setPen(pen);
 		QPolygonF funnel;
-		funnel << QPointF(3, 4) << QPointF(13, 4) << QPointF(9.5, 9) << QPointF(9.5, 13)
-		       << QPointF(6.5, 13) << QPointF(6.5, 9);
+		funnel << QPointF(3, 4) << QPointF(13, 4) << QPointF(9.5, 9) << QPointF(9.5, 13) << QPointF(6.5, 13)
+		       << QPointF(6.5, 9);
 		p.drawPolygon(funnel);
 		p.end();
 		return QIcon(pm);
@@ -309,10 +312,8 @@ private:
 		addBtn_->setStyleSheet(QStringLiteral("QToolButton::menu-indicator { image: none; }"));
 		auto *addMenu = new QMenu(addBtn_);
 		addMenu->addAction(obs_module_text("BSD.NewScene"), this, [this]() { newScene(); });
-		addMenu->addAction(obs_module_text("BSD.NewFolder"), this,
-				   [this]() { newFolder(selectedNode()); });
-		addMenu->addAction(obs_module_text("BSD.NewDivider"), this,
-				   [this]() { newDivider(selectedNode()); });
+		addMenu->addAction(obs_module_text("BSD.NewFolder"), this, [this]() { newFolder(selectedNode()); });
+		addMenu->addAction(obs_module_text("BSD.NewDivider"), this, [this]() { newDivider(selectedNode()); });
 		addBtn_->setMenu(addMenu);
 
 		removeBtn_ = makeButton(obs_module_text("BSD.Remove"));
@@ -553,8 +554,9 @@ private:
 		for (int i = 0; i < screens.size(); i++) {
 			const QString label =
 				QString(obs_module_text("BSD.ProjectorMonitor")).arg(i + 1).arg(screens[i]->name());
-			proj->addAction(label, this,
-					[name, i]() { obs_frontend_open_projector("Scene", i, nullptr, name.c_str()); });
+			proj->addAction(label, this, [name, i]() {
+				obs_frontend_open_projector("Scene", i, nullptr, name.c_str());
+			});
 		}
 
 		addTransitionOverrideMenu(menu, name);

@@ -272,9 +272,7 @@ void Model::deserialize_into(Node &parent, obs_data_array_t *arr)
 		obs_data_t *d = obs_data_array_item(arr, i);
 		const std::string ts = obs_data_get_string(d, "type");
 		auto node = std::make_unique<Node>();
-		node->type = ts == "folder" ? NodeType::Folder
-			     : ts == "divider" ? NodeType::Divider
-					       : NodeType::Scene;
+		node->type = ts == "folder" ? NodeType::Folder : ts == "divider" ? NodeType::Divider : NodeType::Scene;
 		node->id = obs_data_get_string(d, "id");
 		node->name = obs_data_get_string(d, "name");
 		node->color = obs_data_get_string(d, "color");

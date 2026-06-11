@@ -25,9 +25,12 @@ endif()
 project(better-scenes-dock VERSION 0.2.0 LANGUAGES C CXX)
 
 set(OBS_VERSION "32.1.2" CACHE STRING "obs-studio Header-Version (= laufende OBS)")
-set(LIBOBS_INCLUDE
-    "${CMAKE_CURRENT_SOURCE_DIR}/../.deps/obs-studio-${OBS_VERSION}/libobs"
-    CACHE PATH "Pfad zu den libobs-Headern")
+set(
+  LIBOBS_INCLUDE
+  "${CMAKE_CURRENT_SOURCE_DIR}/../.deps/obs-studio-${OBS_VERSION}/libobs"
+  CACHE PATH
+  "Pfad zu den libobs-Headern"
+)
 
 if(NOT EXISTS "${LIBOBS_INCLUDE}/obs-module.h")
   message(
@@ -39,9 +42,7 @@ endif()
 
 # simde (header-only SIMD-Shim): obs-studio 32 bündelt es nicht mehr im Tarball
 # (Submodule/obs-deps), libobs' sse-intrin.h braucht aber <simde/x86/sse2.h>.
-set(SIMDE_INCLUDE
-    "${CMAKE_CURRENT_SOURCE_DIR}/../.deps/simde-include"
-    CACHE PATH "Pfad mit simde/-Headerbaum")
+set(SIMDE_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/../.deps/simde-include" CACHE PATH "Pfad mit simde/-Headerbaum")
 if(NOT EXISTS "${SIMDE_INCLUDE}/simde/x86/sse2.h")
   message(
     FATAL_ERROR
@@ -52,11 +53,18 @@ endif()
 
 # Qt6 (obs-deps, passend zur OBS-Laufzeit 6.8.3) + obs-frontend-api-Header
 # (in obs-studio 32 liegt die Frontend-API unter frontend/api, nicht mehr UI/).
-set(QT6_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/../.deps/obs-deps-qt6-2025-07-11-universal"
-    CACHE PATH "Qt6-Prefix (obs-deps)")
-set(FRONTEND_API_INCLUDE
-    "${CMAKE_CURRENT_SOURCE_DIR}/../.deps/obs-studio-${OBS_VERSION}/frontend/api"
-    CACHE PATH "Pfad zum obs-frontend-api-Header")
+set(
+  QT6_PREFIX
+  "${CMAKE_CURRENT_SOURCE_DIR}/../.deps/obs-deps-qt6-2025-07-11-universal"
+  CACHE PATH
+  "Qt6-Prefix (obs-deps)"
+)
+set(
+  FRONTEND_API_INCLUDE
+  "${CMAKE_CURRENT_SOURCE_DIR}/../.deps/obs-studio-${OBS_VERSION}/frontend/api"
+  CACHE PATH
+  "Pfad zum obs-frontend-api-Header"
+)
 list(PREPEND CMAKE_PREFIX_PATH "${QT6_PREFIX}")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -67,9 +75,11 @@ message(STATUS "Better Scenes Dock: Qt6 ${Qt6_VERSION} aus ${QT6_PREFIX}")
 # CLT-Workaround: auf dieser Maschine liegen die libc++-Header nur im SDK, nicht
 # im Toolchain-Pfad (CommandLineTools/usr/include/c++/v1 fehlt) -> für C++ ergänzen.
 set(_libcxx "${CMAKE_OSX_SYSROOT}/usr/include/c++/v1")
-if(APPLE
-   AND EXISTS "${_libcxx}/type_traits"
-   AND NOT EXISTS "/Library/Developer/CommandLineTools/usr/include/c++/v1/type_traits")
+if(
+  APPLE
+  AND EXISTS "${_libcxx}/type_traits"
+  AND NOT EXISTS "/Library/Developer/CommandLineTools/usr/include/c++/v1/type_traits"
+)
   add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:-isystem>" "$<$<COMPILE_LANGUAGE:CXX>:${_libcxx}>")
   message(STATUS "Better Scenes Dock: libc++-Header aus SDK ergänzt (${_libcxx})")
 endif()
@@ -77,7 +87,8 @@ endif()
 # obsconfig.h wird normalerweise vom OBS-Build generiert (obsconfig.h.in) und
 # fehlt im Quell-Tarball -> minimale Variante für die Plugin-Kompilierung erzeugen.
 file(
-  WRITE "${CMAKE_CURRENT_BINARY_DIR}/obsconfig/obsconfig.h"
+  WRITE
+  "${CMAKE_CURRENT_BINARY_DIR}/obsconfig/obsconfig.h"
   "#pragma once\n"
   "#define OBS_DATA_PATH \"../../data\"\n"
   "#define OBS_PLUGIN_PATH \"../obs-plugins\"\n"
@@ -94,7 +105,8 @@ configure_file(
 )
 
 add_library(
-  ${PROJECT_NAME} MODULE
+  ${PROJECT_NAME}
+  MODULE
   "${CMAKE_CURRENT_SOURCE_DIR}/../src/plugin-main.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/../src/bsd-model.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/../src/bsd-dock.cpp"
