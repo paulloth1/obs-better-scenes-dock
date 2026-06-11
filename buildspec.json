@@ -33,12 +33,12 @@
     },
     "platformConfig": {
         "macos": {
-            "bundleId": "com.diyobsplugins.scene-dividers"
+            "bundleId": "com.diyobsplugins.better-scenes-dock"
         }
     },
-    "name": "scene-dividers",
-    "displayName": "Scene Dividers — Labeled dividers for the OBS scene list",
-    "version": "0.1.0",
+    "name": "better-scenes-dock",
+    "displayName": "Better Scenes Dock — folders, dividers & colors for the OBS scene list",
+    "version": "0.2.0",
     "author": "Paul Loth",
     "website": "https://github.com/paulloth",
     "email": "mail@paulloth.de"

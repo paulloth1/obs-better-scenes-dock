@@ -1,48 +1,45 @@
-# Scene Dividers for OBS Studio
+# Better Scenes Dock for OBS Studio
 
-Labeled, colored dividers **directly in the native OBS scene list** — like the
-structure you wish your scene list had when it grows past a dozen scenes.
+A drop-in replacement for the OBS scene list with the structure it has always
+been missing: **nested folders**, **collapsible dividers** and **colors** for
+scenes, folders and dividers.
 
 ```
-  Intro
-  Starting Soon
-  ─────── GAME ───────        ← divider (not clickable)
-  Gameplay
-  Gameplay + Cam
-  ─────── BREAK ──────
-  Break
-  BRB
+▼ 📁 GAME              (green)
+     Gameplay
+     Gameplay + Cam
+  ▶ 📁 Replays  (3)
+  ── BREAK ───────────
+     BRB
+     Pause
 ```
 
 ## Features
 
-- Dividers appear as a line with a centered label in the regular scene list —
-  no replacement dock, your workflow stays the same
-- Optional accent color per divider
-- Dividers are **not selectable**: clicking one can never switch your program scene
-- Managed via *Tools → Scene Dividers…*: add, rename, color, remove, move up/down
-- Persists per scene collection, survives restarts and collection switches
+- Replaces the native Scenes dock with a tree view
+- Click a scene to switch to it (sets the preview scene in Studio Mode)
+- Nested, collapsible **folders**
+- Labeled **dividers** (lines with optional text)
+- **Colors** for scenes, folders and dividers
+- Current program scene (red) / preview scene (green) indicators
+- Structure persists per scene collection
+
+> Status: early version (v0.2). Adding/removing/renaming scenes and drag & drop
+> are coming next; for now use the right-click menu to create folders/dividers,
+> set colors and move items.
 
 ## How it works
 
-A divider is a real (empty) scene marked via libobs private settings, which OBS
-persists inside the scene collection. The plugin restyles those rows in the
-scene list (custom item delegate) and removes their selectable flag. Because
-every row stays a real scene, OBS keeps handling ordering, saving and loading
-natively — the plugin never injects foreign rows into OBS internals.
-
-### Known limitations
-
-- Divider scenes are real scenes, so they are visible to obs-websocket clients
-  (Stream Deck, Companion, …) and in scene dropdowns of other plugins.
-- Assigning a scene-switch hotkey to a divider scene will switch to it (empty
-  output). Don't do that.
-- Grid mode of the scene list renders dividers as plain tiles for now.
+The dock renders a plugin-owned tree where scene entries reference real OBS
+scenes by name. Folders and dividers are pure plugin metadata stored per scene
+collection in the plugin's config directory. Switching scenes uses the official
+OBS frontend API, and the native `scenesDock` is hidden on load so this dock
+takes its place (you can bring the native one back from the Docks menu).
 
 ## Installation
 
-Currently macOS only (Windows/Linux builds are planned). Download the latest
-release and copy `scene-dividers.plugin` to:
+Currently macOS only (Windows/Linux planned). Copy `better-scenes-dock.plugin`
+to:
 
 ```
 ~/Library/Application Support/obs-studio/plugins/
@@ -52,9 +49,8 @@ Requires OBS Studio 32+.
 
 ## Building
 
-The repository uses the official [obs-plugintemplate](https://github.com/obsproject/obs-plugintemplate)
-layout (`CMakePresets.json`, CI builds). For fast local iteration on macOS
-without a full Xcode install, see [dev/README.md](dev/README.md).
+Official [obs-plugintemplate](https://github.com/obsproject/obs-plugintemplate)
+layout for CI/releases; for fast local macOS iteration see [dev/README.md](dev/README.md).
 
 ## License
 

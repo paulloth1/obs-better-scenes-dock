@@ -13,7 +13,7 @@ genutzt. (Aufbau wie beim 2ME-Projekt, angepasst an obs-studio 32.)
   Laden durch OBS aufgelöst → **kein kompiliertes libobs nötig**, nur Header.
   Qt wird bewusst **nicht gelinkt** (nur Header/MOC) — vermeidet transitive
   Frameworks wie das entfernte AGL.
-- Baut ein `scene-dividers.plugin`-Bundle inkl. `data/` (Locale), signiert es
+- Baut ein `better-scenes-dock.plugin`-Bundle inkl. `data/` (Locale), signiert es
   ad-hoc und kopiert es nach `~/Library/Application Support/obs-studio/plugins/`.
 
 ## Voraussetzungen (einmalig)
@@ -59,8 +59,8 @@ genutzt. (Aufbau wie beim 2ME-Projekt, angepasst an obs-studio 32.)
 ```
 
 Danach OBS starten und im Log prüfen (Hilfe › Logdateien › Aktuelles Log
-anzeigen): `[scene-dividers] Scene Dividers loaded successfully` und
-`scene list hooked (divider delegate installed)`.
+anzeigen): `[better-scenes-dock] Better Scenes Dock loaded successfully` und
+`Better Scenes dock registered`.
 
 ## Grenzen
 

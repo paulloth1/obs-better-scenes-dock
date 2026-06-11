@@ -22,7 +22,7 @@ if(APPLE AND NOT CMAKE_OSX_SYSROOT)
   set(CMAKE_OSX_SYSROOT "${_macos_sdk}" CACHE PATH "macOS SDK" FORCE)
 endif()
 
-project(scene-dividers VERSION 0.1.0 LANGUAGES C CXX)
+project(better-scenes-dock VERSION 0.2.0 LANGUAGES C CXX)
 
 set(OBS_VERSION "32.1.2" CACHE STRING "obs-studio Header-Version (= laufende OBS)")
 set(LIBOBS_INCLUDE
@@ -62,7 +62,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
-message(STATUS "Scene Dividers: Qt6 ${Qt6_VERSION} aus ${QT6_PREFIX}")
+message(STATUS "Better Scenes Dock: Qt6 ${Qt6_VERSION} aus ${QT6_PREFIX}")
 
 # CLT-Workaround: auf dieser Maschine liegen die libc++-Header nur im SDK, nicht
 # im Toolchain-Pfad (CommandLineTools/usr/include/c++/v1 fehlt) -> für C++ ergänzen.
@@ -71,7 +71,7 @@ if(APPLE
    AND EXISTS "${_libcxx}/type_traits"
    AND NOT EXISTS "/Library/Developer/CommandLineTools/usr/include/c++/v1/type_traits")
   add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:-isystem>" "$<$<COMPILE_LANGUAGE:CXX>:${_libcxx}>")
-  message(STATUS "Scene Dividers: libc++-Header aus SDK ergänzt (${_libcxx})")
+  message(STATUS "Better Scenes Dock: libc++-Header aus SDK ergänzt (${_libcxx})")
 endif()
 
 # obsconfig.h wird normalerweise vom OBS-Build generiert (obsconfig.h.in) und
@@ -96,9 +96,8 @@ configure_file(
 add_library(
   ${PROJECT_NAME} MODULE
   "${CMAKE_CURRENT_SOURCE_DIR}/../src/plugin-main.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/../src/sd-dividers.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/../src/sd-scene-list.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/../src/sd-dialog.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../src/bsd-model.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../src/bsd-dock.cpp"
   "${CMAKE_CURRENT_BINARY_DIR}/plugin-support.c"
 )
 
@@ -141,7 +140,7 @@ set_target_properties(
     BUNDLE TRUE
     BUNDLE_EXTENSION "plugin"
     MACOSX_BUNDLE_BUNDLE_NAME "${PROJECT_NAME}"
-    MACOSX_BUNDLE_GUI_IDENTIFIER "com.diyobsplugins.scene-dividers"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "com.diyobsplugins.better-scenes-dock"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
 )

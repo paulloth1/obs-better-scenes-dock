@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Schneller lokaler Scene-Dividers-Build (Ninja, ohne volles Xcode). Siehe dev/README.md.
+# Schneller lokaler Better-Scenes-Dock-Build (Ninja, ohne volles Xcode). Siehe dev/README.md.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -9,6 +9,6 @@ cmake -S "${HERE}" -B "${BUILD_DIR}" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo 
 cmake --build "${BUILD_DIR}"
 
 echo
-echo "✓ scene-dividers.plugin gebaut + installiert nach:"
-echo "  ~/Library/Application Support/obs-studio/plugins/scene-dividers.plugin"
-echo "OBS starten und Log prüfen: [scene-dividers] Scene Dividers loaded successfully"
+echo "✓ better-scenes-dock.plugin gebaut + installiert nach:"
+echo "  ~/Library/Application Support/obs-studio/plugins/better-scenes-dock.plugin"
+echo "OBS starten und Log prüfen: [better-scenes-dock] Better Scenes Dock loaded successfully"

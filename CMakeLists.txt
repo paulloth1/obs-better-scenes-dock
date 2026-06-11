@@ -38,9 +38,8 @@ target_sources(
   ${CMAKE_PROJECT_NAME}
   PRIVATE
     src/plugin-main.cpp
-    src/sd-dividers.cpp
-    src/sd-scene-list.cpp
-    src/sd-dialog.cpp
+    src/bsd-model.cpp
+    src/bsd-dock.cpp
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})

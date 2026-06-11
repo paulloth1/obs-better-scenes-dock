@@ -1,21 +1,25 @@
-# Scene Dividers — Trenner für die OBS-Szenenliste
+# Better Scenes Dock — Ordner, Trenner & Farben für die OBS-Szenenliste
 
 > Living-Document: Ziele, Architektur, Roadmap und Fortschritt für ein OBS-Plugin,
-> das beschriftbare, einfärbbare Trenner in der **nativen** Szenenliste ermöglicht —
-> wie Gruppen/Trenner bei den Quellen, nur für Szenen.
+> das ein **verbessertes Szenen-Dock** bereitstellt: die gewohnte OBS-Funktionalität
+> plus verschachtelbare **Ordner**, einklappbare **Trenner** und **Farben** für
+> Szenen, Ordner und Trenner.
 
-Letzte Aktualisierung: 2026-06-11
+Letzte Aktualisierung: 2026-06-11 · GitHub-Repo (geplant): **obs-better-scenes-dock**
 
 ---
 
-## 1. Projektziel
+## 1. Projektziel & Historie
 
-Die OBS-Szenenliste ist flach. Bei vielen Szenen (Streams mit Segmenten, Sport-
-Produktionen, Multi-Format-Setups) fehlt jede optische Struktur. Dieses Plugin
-fügt **Trenner** direkt in die echte Szenenliste ein: eine Linie mit optionaler
-Beschriftung und Akzentfarbe, nicht anklickbar, frei positionierbar.
+Erstes Konzept war „Scene Dividers": Trenner direkt in die **native** Szenenliste
+hacken (Ansatz A, Marker-Szenen + Qt-Delegate auf dem `scenes`-QListWidget). In der
+realen Umgebung des Nutzers erwies sich das als zu fragil (Erkennung/Umfärben
+unzuverlässig, Abhängigkeit von OBS-Internas). **Entscheidung 2026-06-11: Pivot auf
+Ansatz B** — ein eigenes Dock, das die native Szenenliste **ersetzt** und volle
+Kontrolle über Darstellung und Struktur gibt.
 
-GitHub-Repo (geplant): **obs-scene-dividers** · Anzeigename: **Scene Dividers**
+Ziel: ein Dock, das sich wie die OBS-Szenenliste bedient, aber zusätzlich echte
+Ordnerstruktur, einklappbare Bereiche und Farbcodierung bietet.
 
 ---
 
@@ -23,133 +27,120 @@ GitHub-Repo (geplant): **obs-scene-dividers** · Anzeigename: **Scene Dividers**
 
 | Thema | Entscheidung | Konsequenz |
 |---|---|---|
-| **Ansatz** | **A: Eingriff in die native Szenenliste** (kein eigenes Dock) | Qt-Zugriff auf das `QListWidget` "scenes" im Hauptfenster; Abgrenzung zu obs-scene-tree-view (eigenes Dock). |
-| **Umfang v1** | **Nur Trenner**, keine einklappbaren Gruppen | Kleiner, sicherer Start; Gruppen (Einklappen via `setRowHidden`) als mögliche v2. |
-| **Mechanik** | **Marker-Szenen**: jeder Trenner ist eine echte, leere Szene | OBS übernimmt Persistenz, Reihenfolge und Listen-Lebenszyklus gratis; wir stylen nur. Sichtbar in obs-websocket/Streamdeck (dokumentierte Einschränkung). |
-| **Erkennung** | **Private Settings** der Szenen-Source (`scene_dividers_marker`, `scene_dividers_color`) | libobs speichert `private_settings` pro Source in der Szenensammlung (obs.c) → überlebt Neustart/Collection-Wechsel, robust gegen Umbenennen. Kein Namens-Präfix nötig. |
-| **Bedienung** | **Tools-Menü** → Verwaltungsdialog (hinzufügen/**umwandeln**/umbenennen/Farbe/entfernen/▲▼) | Trenner sind in der Liste bewusst nicht selektierbar, daher läuft Verwaltung über den Dialog. „Umwandeln" adoptiert bestehende Szenen als Trenner (und zurück). Kontextmenü/Hotkey ggf. später. |
-| **Multiview** | Trenner werden **automatisch aus dem Multiview ausgeblendet** | Setzt OBS' natives Private-Setting `show_in_multiview=false` (sonst belegt die leere Marker-Szene einen Multiview-Slot). Sofort-Refresh über das `scenesReordered`-Signal → `UpdateMultiviewProjectors`. |
-| **Aussehen** | Linie + **zentrierte Beschriftung** + **Akzentfarbe** pro Trenner | Eigener `QStyledItemDelegate`; Label = Szenenname; nur Striche/leer = reine Linie. |
-| **Plattform** | Erstmal **nur macOS** (Dev-Maschine); Win/Linux später via Template-CI | dev/-Ninja-Build wie bei 2ME; offizieller Template-Build bleibt für CI/Release. |
-| **OBS/Qt** | OBS 32.1.2 (lokal installiert), Qt 6.8.3 (OBS-Runtime) | Header aus obs-studio-32.1.2-Tarball; Qt nur Header/MOC, nicht gelinkt (dynamic_lookup). |
+| **Ansatz** | **Eigenes Dock** (`QTreeWidget`), **ersetzt** das native Szenen-Dock | Beim Laden wird das native `scenesDock` ausgeblendet; unser Dock „Szenen" tritt an seine Stelle. (Native bleibt über das Docks-Menü reaktivierbar.) |
+| **Struktur** | **Echte verschachtelte Ordner + Trenner** (Baum-Datenmodell) | Ordner enthalten Szenen/Unterordner und sind einklappbar; Trenner sind beschriftete Linien. |
+| **Farben** | Für **Szenen, Ordner und Trenner** | Pro Knoten `#RRGGBB`; Delegate malt Akzentbalken/-text. |
+| **v1-Umfang** | **Minimal zuerst**: anzeigen/wechseln (Studio-Preview-aware), Ordner/Trenner anlegen + einklappen, Farben, Verschieben per Kontextmenü | Szenen anlegen/löschen/umbenennen **und Drag&Drop** kommen direkt danach (Phase 2). |
+| **Persistenz** | Eigene JSON-Datei im Modul-Config-Dir, **pro Szenensammlung** | `obs_module_config_path("structure.json")`; Map `Collection → Baum`. Umgeht Timing-Probleme des Save-Callbacks beim Start; voll unter eigener Kontrolle. |
+| **Plattform/OBS/Qt** | macOS zuerst; OBS 32.1.2 / Qt 6.8.3 | dev/-Ninja-Build wie bei 2ME; Qt nur Header/MOC (dynamic_lookup). |
 
 ---
 
 ## 3. Architektur
 
-### 3.1 Kernidee: Marker-Szenen + Restyling statt Fremd-Zeilen
+### 3.1 Verifizierte OBS-APIs (frontend/api/obs-frontend-api.h, OBS 32.1.2)
 
-OBS' Szenenliste (`SceneTree : QListWidget`, objectName `scenes`) enthält **eine
-Zeile pro Szene**; die Zeilenreihenfolge IST die Szenenreihenfolge, die OBS als
-`scene_order` in der Szenensammlung speichert. Wir fügen **keine fremden Zeilen**
-ein (das würde OBS' Drag&Drop/Rebuild-Logik brechen), sondern legen pro Trenner
-eine **echte leere Szene** an und stylen deren Zeile um:
+- **Dock**: `obs_frontend_add_dock_by_id(id, title, QWidget*)` / `obs_frontend_remove_dock(id)`.
+- **Szenen**: `obs_frontend_get_scenes`, `obs_frontend_get/set_current_scene`,
+  `obs_frontend_get/set_current_preview_scene`, `obs_frontend_preview_program_mode_active`.
+- **Events**: `SCENE_CHANGED`, `SCENE_LIST_CHANGED`, `PREVIEW_SCENE_CHANGED`,
+  `STUDIO_MODE_ENABLED/DISABLED`, `SCENE_COLLECTION_CHANGING/CHANGED`, `FINISHED_LOADING`, `EXIT`.
+- **Persistenz-Helfer**: `obs_module_config_path`, `os_mkdirs`, `obs_data_*`-JSON.
+- **Natives Dock**: `QMainWindow::findChild<QDockWidget*>("scenesDock")` → `hide()`.
 
-- **Delegate** (`DividerDelegate : QStyledItemDelegate`): malt Trenner-Zeilen als
-  Linie mit zentriertem Label (Farbe aus Private Settings, sonst Theme-Grau);
-  normale Szenen gehen an die Basisklasse.
-- **Flags**: Trenner-Zeilen verlieren `ItemIsSelectable|ItemIsEditable`. Wichtig,
-  weil `on_scenes_currentItemChanged` → `SetCurrentScene` sonst beim Klick die
-  Programmszene auf die leere Trenner-Szene schalten würde.
-- **Restyle-Pass** läuft erneut bei: `OBS_FRONTEND_EVENT_SCENE_LIST_CHANGED`,
-  `SCENE_COLLECTION_CHANGED`, `FINISHED_LOADING` (Hook) sowie Model-Signal
-  `rowsInserted` (OBS baut die Liste bei Events neu bzw. erweitert sie).
+### 3.2 Datenmodell ([src/bsd-model.hpp](src/bsd-model.hpp))
 
-### 3.2 Verifizierte OBS-Interna (obs-studio 32.1.2)
+`Node`-Baum: Typen `Root / Folder / Divider / Scene`. Szenen-Knoten referenzieren
+eine echte OBS-Szene über den Namen (`name == Szenenname`); Ordner/Trenner sind
+reine Plugin-Metadaten mit eigener `id`, `name`, `color`, `collapsed`.
 
-- `frontend/forms/OBSBasic.ui`: `SceneTree` objectName **"scenes"** (unverändert seit 31).
-- `OBSBasic_SceneCollections.cpp:885`: Reihenfolge wird beim Speichern aus dem
-  Widget gelesen (`scene_order`) → programmatisches `takeItem`/`insertItem`
-  ändert die echte Szenenreihenfolge; danach `obs_frontend_save()` + Signal
-  `scenesReordered` (aktualisiert Multiview-Projektoren).
-- `OBSBasic_SceneItems.cpp:178`: `source_create` → `AddScene` via **WaitConnection**
-  → nach `obs_scene_create()` existiert das Listenitem **synchron** (UI-Thread);
-  neue Szenen landen bei `currentRow + 1`.
-- `libobs/obs.c:2342`: `private_settings` werden pro Source in der Collection
-  gespeichert → unser Marker-Flag + Farbe persistieren automatisch.
-- OBS-eigene Quellfarben nutzen denselben Private-Settings-Mechanismus (Vorbild).
+- `reconcile_with_obs()`: entfernt Szenen-Knoten, deren Szene nicht mehr existiert,
+  und hängt neue OBS-Szenen (in OBS-Reihenfolge) ans Root-Ende. Hält den Baum mit
+  der realen Szenenliste konsistent.
+- Persistenz: `load/save_for_collection(name)` → JSON-Map `{ Collection: { children:[…] } }`.
 
-### 3.3 Dateien
+### 3.3 Dock-UI ([src/bsd-dock.cpp](src/bsd-dock.cpp))
+
+`QTreeWidget` + eigener `QStyledItemDelegate`:
+- **Szene anklicken** → `set_current_preview_scene` (Studio-Modus) bzw.
+  `set_current_scene`. **Program rot / Preview grün** als linker Balken + fett.
+- **Ordner**: einklappbar (Zustand → Modell, persistiert).
+- **Trenner**: als Linie mit zentriertem Label gerendert, nicht als Szene wählbar.
+- **Farben**: Akzentbalken links + getönter Text.
+- **Kontextmenü**: Neuer Ordner / Neuer Trenner / Umbenennen (Ordner+Trenner) /
+  Farbe setzen+entfernen / Verschieben nach ▸ (Ordnerbaum) / Entfernen.
+- **Event-getrieben**: Rebuild bei Listen-/Collection-Änderung; Highlight bei
+  Scene/Preview/Studio-Wechsel; Save bei Collection-Wechsel und EXIT.
+- Beim Laden wird das native `scenesDock` ausgeblendet.
+
+### 3.4 Dateien
 
 ```
 src/
-├─ plugin-main.cpp      Modul-Lifecycle (post_load: Hook + Tools-Menü)
-├─ sd-dividers.{hpp,cpp} Kern ohne Qt: Marker-Erkennung, Farbe, create/rename/
-│                        remove (Private Settings, eindeutige Szenennamen)
-├─ sd-scene-list.{hpp,cpp} Qt-Hook: findChild "scenes", DividerDelegate,
-│                        Restyle-Pass, move_scene_row (nur Trenner-Zeilen)
-└─ sd-dialog.{hpp,cpp}  Verwaltungsdialog (Tools-Menü), spiegelt die Liste
+├─ plugin-main.cpp     Modul-Lifecycle (post_load → dock_register)
+├─ bsd-model.{hpp,cpp} Baum-Datenmodell + reconcile + JSON-Persistenz (Qt-frei)
+└─ bsd-dock.{hpp,cpp}  QTreeWidget-Dock, Delegate, Events, Kontextmenü
 data/locale/{en-US,de-DE}.ini
-dev/                    Schneller Ninja-Build ohne Xcode (siehe dev/README.md)
 ```
-
-### 3.4 Bekannte Einschränkungen (dokumentieren, v1 akzeptiert)
-
-1. **Marker-Szenen sind echte Szenen**: sichtbar in obs-websocket (Streamdeck/
-   Companion), im Vollbild-Projektor-Menü und in Szenen-Dropdowns anderer
-   Plugins. Empfehlung an Nutzer: Trenner sprechend benennen.
-2. **Hotkey "Szene wechseln"** lässt sich theoretisch auch auf eine Trenner-Szene
-   legen → schaltet auf die leere Szene. Nicht verhindert in v1.
-3. **Grid-Modus** der Szenenliste: Trenner werden als normale Kachel mit Linie
-   gemalt — funktional, aber nicht hübsch. Politur später.
-4. **OBS-Update-Risiko**: Wir hängen am objectName "scenes" und am Verhalten von
-   SceneTree. Bei jeder neuen OBS-Major-Version gegenprüfen (Abschnitt 3.2).
 
 ---
 
 ## 4. Roadmap
 
-- [x] **Phase 0 — Setup & Skelett** ✅ (2026-06-11)
-      Template-Gerüst von 2ME übernommen, auf `scene-dividers` konfiguriert.
-      dev/-Ninja-Build grün (OBS-32-Anpassungen: frontend/api-Pfad, simde,
-      generiertes obsconfig.h, data/-Bundling). `otool -L`: nur libc++/libSystem.
-- [ ] **Phase 1 — Funktionstest v1** (Code komplett, Test durch Nutzer offen)
-      Trenner anlegen/umbenennen/einfärben/verschieben/entfernen über Tools-Menü;
-      Trenner-Rendering + Nicht-Auswählbarkeit in der Szenenliste.
-      *DoD: Alle Operationen funktionieren live in OBS 32.1.2; Trenner überleben
-      Neustart und Collection-Wechsel.*
-- [ ] **Phase 2 — Politur**
-      Kontextmenü-Eintrag in der Szenenliste, Hotkey, Grid-Modus-Darstellung,
-      Schutz vor Szenenwechsel-Hotkeys auf Trenner, Farb-Reset.
-- [ ] **Phase 3 — Release**
-      Win/Linux-CI-Builds via Template, README-Screenshots/GIF, GitHub-Release,
-      ggf. OBS-Forum/Plugin-Portal.
-- [ ] **v2-Idee — Gruppen**
-      Einklappbare Bereiche (Trenner als Gruppenkopf, Szenen darunter via
-      `setRowHidden` verstecken). Erst nach stabiler v1 evaluieren.
+- [x] **Phase 0 — Pivot & Walking Skeleton** ✅ (2026-06-11)
+      Projekt auf `better-scenes-dock` umgestellt, altes Scene-Dividers-/Native-
+      Listen-Coding entfernt. Modell + Dock implementiert, baut grün, nur
+      libc++/libSystem gelinkt. *Offen: erster interaktiver Test in OBS.*
+- [ ] **Phase 1 — v1 minimal verifizieren** (Test durch Nutzer)
+      Dock ersetzt native Liste; Szenen anzeigen/wechseln (inkl. Studio-Preview);
+      Ordner/Trenner anlegen, einklappen, einfärben; Verschieben per Kontextmenü;
+      Struktur überlebt Neustart + Collection-Wechsel.
+      *DoD: alles live funktionsfähig in OBS 32.1.2.*
+- [ ] **Phase 2 — Volle Szenen-Bedienung**
+      Szene anlegen/duplizieren/löschen/umbenennen aus dem Dock; **Drag&Drop**
+      (Sortieren + in/aus Ordner ziehen); Doppelklick-Umbenennen; Rename-Sync,
+      wenn Szenen extern umbenannt werden.
+- [ ] **Phase 3 — Parität & Politur**
+      Kontextmenü-Parität zum nativen (Filter, Übergangs-Override, Projektor,
+      Screenshot …), Toolbar (+/−), Suchfeld, Studio-Modus-Feinschliff.
+- [ ] **Phase 4 — Release**
+      Win/Linux-CI-Builds, README/Screenshots, GitHub-Release.
 
 ---
 
-## 5. Fortschrittslog
+## 5. Risiken & offene Punkte
 
-- **2026-06-11** — **Nach 1. Nutzer-Feedback.** (1) Trenner werden jetzt per
-  `show_in_multiview=false` (OBS-natives Private-Setting, verifiziert in
-  `frontend/components/Multiview.cpp:163` + `OBSBasic_Scenes.cpp:595`) automatisch
-  aus dem Multiview ausgeblendet; Sofort-Refresh via `scenesReordered`-Signal, da
-  `AddScene` das Multiview baut, bevor unser Flag steht. (2) **Umwandeln-Funktion**:
-  bestehende Szenen lassen sich als Trenner adoptieren (und zurück) — löst, dass
-  die alten, manuell angelegten Strich-Szenen des Nutzers (`------ME1------`) keine
-  Marker hatten und daher nicht bearbeitbar waren. (3) Delegate optisch deutlicher
-  (dezenter Hintergrund, dickere Linie bei reinen Linien, Akzentfarbe, Label
-  uppercase + Strich-Padding entfernt). Baut & lädt. *Offen: erneuter Nutzertest.*
-- **2026-06-11** — Projekt initialisiert. Ansatz entschieden (native Liste statt
-  eigenem Dock; Abgrenzung zu obs-scene-tree-view), Mechanik Marker-Szenen +
-  Private Settings, v1 nur Trenner (Label + Farbe), Bedienung über Tools-Menü,
-  erstmal nur macOS. OBS-Interna gegen obs-studio-32.1.2-Quellen verifiziert
-  (§3.2). Phase 0 abgeschlossen: Gerüst + kompletter v1-Code + grüner dev-Build,
-  Plugin installiert. **Offen: erster Funktionstest in OBS durch Nutzer.**
-  - dev-Build-Learnings ggü. 2ME: obs-studio 32 hat `UI/` → `frontend/`
-    umstrukturiert (frontend-api unter `frontend/api`), bündelt **simde** nicht
-    mehr im Tarball (Kopie liegt in `.deps/simde-include`) und `obs-config.h`
-    verlangt ein generiertes `obsconfig.h` (minimal in dev/CMakeLists erzeugt).
-  - Qt 6.8.3 (OBS-32-Runtime) == obs-deps Qt von 2ME → per Symlink
-    wiederverwendet (`.deps/obs-deps-qt6-2025-07-11-universal`).
+1. **Reihenfolge**: Das Dock zeigt die Baum-Reihenfolge, nicht OBS' `scene_order`.
+   Für Multiview/andere Plugins bleibt OBS' Reihenfolge maßgeblich. Ggf. in Phase 2
+   optional die OBS-Reihenfolge an die Dock-Reihenfolge angleichen.
+2. **Externe Umbenennung**: Eine außerhalb des Docks umbenannte Szene erscheint als
+   „entfernt + neu" und verliert ihre Ordner-Zuordnung (v1-Limit; Phase 2 fixt das
+   über das `rename`-Signal).
+3. **Natives Dock ausgeblendet**: Wir verstecken `scenesDock` bei jedem Laden.
+   Nutzer kann es über das Docks-Menü zurückholen; beim nächsten Start wieder weg.
+4. **OBS-Update-Risiko**: Hängt am Objektnamen `scenesDock` (Ausblenden). Bricht das,
+   laufen schlimmstenfalls beide Docks — unkritisch.
 
 ---
 
-## 6. Referenzen
+## 6. Fortschrittslog
+
+- **2026-06-11** — **Pivot auf Ansatz B (eigenes Dock).** Grund: native-Listen-
+  Variante (Scene Dividers) war beim Nutzer unzuverlässig (nur eine Szene erkannt,
+  Umwandeln/Einfärben fehlerhaft). Neues Konzept „Better Scenes Dock": ersetzt die
+  native Liste, echte Ordner + Trenner + Farben. Alle tragenden APIs gegen OBS-32-
+  Quellen verifiziert (Dock, Szenenwechsel, Studio-Preview, Events, Persistenz).
+  Modell + Dock implementiert (v1 minimal), baut & linkt sauber. Projekt-Identität
+  auf `better-scenes-dock`/`0.2.0` umgestellt; alte `sd-*`-Quellen entfernt.
+  *Nächster Schritt: OBS neu starten, Dock interaktiv testen.*
+- *(Historie der Scene-Dividers-Phase: siehe git-Log vor diesem Commit.)*
+
+---
+
+## 7. Referenzen
 
 - Plugin-Template: https://github.com/obsproject/obs-plugintemplate
 - OBS Frontend-API: https://docs.obsproject.com/reference-frontend-api
 - Schwester-Projekt mit Build-Learnings: ../2ME (PROJEKT.md §8)
-- Abgrenzung: obs-scene-tree-view (eigenes Dock mit Ordnerbaum)
+- Verwandt: obs-scene-tree-view (eigenes Dock mit Baum) — wir ergänzen Farben +
+  einklappbare Trenner + native Ersetzung.
