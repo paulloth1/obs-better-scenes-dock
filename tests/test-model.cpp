@@ -121,8 +121,9 @@ static void test_remove_rescues_children()
 	Node *s1 = add_scene(f, "s1");
 	Node *s2 = add_scene(f, "s2");
 
+	const std::string fid = f->id; // f is destroyed by remove_node below
 	CHECK(m.remove_node(f));
-	CHECK(m.find(f->id) == nullptr);
+	CHECK(m.find(fid) == nullptr);
 	/* s1, s2 lifted into the root at F's old position (index 1, 2). */
 	CHECK(m.find_parent(s1) == &m.root);
 	CHECK(m.find_parent(s2) == &m.root);
