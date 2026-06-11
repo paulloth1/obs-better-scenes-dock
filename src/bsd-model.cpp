@@ -149,6 +149,28 @@ bool Model::move_node(Node *node, Node *newParent, int index)
 	return true;
 }
 
+bool Model::move_within_parent(Node *node, int delta)
+{
+	if (!node || node->type == NodeType::Root || delta == 0)
+		return false;
+	Node *parent = find_parent(node);
+	if (!parent)
+		return false;
+	auto &ch = parent->children;
+	int idx = -1;
+	for (int i = 0; i < (int)ch.size(); i++) {
+		if (ch[i].get() == node) {
+			idx = i;
+			break;
+		}
+	}
+	const int target = idx + delta;
+	if (idx < 0 || target < 0 || target >= (int)ch.size())
+		return false;
+	std::swap(ch[idx], ch[target]);
+	return true;
+}
+
 /* ---- reconcile with the real OBS scene list ----------------------------- */
 
 static void collect_scene_names(const Node &n, std::set<std::string> &out)

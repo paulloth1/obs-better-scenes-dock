@@ -56,6 +56,7 @@ public:
 	Node *add_divider(Node *parent, const std::string &name);
 	bool remove_node(Node *node);                 // folders/dividers; scene children move to parent
 	bool move_node(Node *node, Node *newParent, int index);
+	bool move_within_parent(Node *node, int delta); // -1 = up, +1 = down
 
 	/* JSON persistence keyed by scene collection name (own config file). */
 	void load_for_collection(const std::string &collection);

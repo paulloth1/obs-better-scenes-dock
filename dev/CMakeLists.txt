@@ -1,4 +1,4 @@
-# Schneller, isolierter macOS-Dev-Build für Scene Dividers (Ninja, ohne volles Xcode).
+# Schneller, isolierter macOS-Dev-Build für Better Scenes Dock (Ninja, ohne volles Xcode).
 #
 # Dieser Build existiert NEBEN dem offiziellen Template-Build (Root-CMakeLists.txt,
 # Xcode-Generator) und lässt diesen unberührt. Er dient nur der schnellen lokalen

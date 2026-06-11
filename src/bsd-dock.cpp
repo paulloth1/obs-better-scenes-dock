@@ -27,14 +27,22 @@ the Free Software Foundation; either version 2 of the License, or
 
 #include <QColor>
 #include <QColorDialog>
+#include <QConicalGradient>
 #include <QDockWidget>
+#include <QHBoxLayout>
+#include <QIcon>
 #include <QInputDialog>
 #include <QMainWindow>
 #include <QMenu>
+#include <QMessageBox>
 #include <QPainter>
 #include <QPen>
+#include <QPixmap>
+#include <QPolygonF>
 #include <QPointer>
+#include <QStyle>
 #include <QStyledItemDelegate>
+#include <QToolButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -142,20 +150,26 @@ public:
 		tree_->setContextMenuPolicy(Qt::CustomContextMenu);
 		tree_->setItemDelegate(new ItemDelegate(tree_));
 
+		auto *toolbar = buildToolbar();
+
 		auto *layout = new QVBoxLayout(this);
 		layout->setContentsMargins(0, 0, 0, 0);
+		layout->setSpacing(0);
 		layout->addWidget(tree_);
+		layout->addLayout(toolbar);
 
 		connect(tree_, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem *it, int) { activate(it); });
 		connect(tree_, &QTreeWidget::itemExpanded, this, [this](QTreeWidgetItem *it) { setCollapsed(it, false); });
 		connect(tree_, &QTreeWidget::itemCollapsed, this, [this](QTreeWidgetItem *it) { setCollapsed(it, true); });
 		connect(tree_, &QTreeWidget::customContextMenuRequested, this,
 			[this](const QPoint &pos) { showMenu(pos); });
+		connect(tree_, &QTreeWidget::itemSelectionChanged, this, [this]() { updateToolbar(); });
 
 		collection_ = current_collection();
 		model_.load_for_collection(collection_);
 		model_.reconcile_with_obs();
 		rebuild();
+		updateToolbar();
 		hideNativeDock();
 	}
 
@@ -200,11 +214,177 @@ public:
 
 private:
 	QTreeWidget *tree_;
+	QToolButton *addBtn_ = nullptr;
+	QToolButton *removeBtn_ = nullptr;
+	QToolButton *colorBtn_ = nullptr;
+	QToolButton *filtersBtn_ = nullptr;
+	QToolButton *upBtn_ = nullptr;
+	QToolButton *downBtn_ = nullptr;
 	Model model_;
 	std::string collection_;
 	bool updating_ = false;
 
 	void save() { model_.save_for_collection(collection_); }
+
+	/* ---- toolbar ---- */
+
+	QToolButton *makeButton(const QString &tip)
+	{
+		auto *b = new QToolButton(this);
+		b->setToolTip(tip);
+		b->setAutoRaise(true);
+		b->setFocusPolicy(Qt::NoFocus);
+		b->setFixedSize(26, 24);
+		return b;
+	}
+
+	/* The text glyphs (＋ － ▲ ▼) render via the widget font; the funnel and
+	 * colour swatch are hand-drawn QIcons so they sit at the same visual weight
+	 * and size instead of a tiny emoji. */
+	static constexpr int kIconPx = 14;
+
+	/* A filter funnel, painted in the current theme's text colour. */
+	QIcon funnelIcon() const
+	{
+		const int s = 16;
+		const qreal dpr = devicePixelRatioF();
+		QPixmap pm(qRound(s * dpr), qRound(s * dpr));
+		pm.setDevicePixelRatio(dpr);
+		pm.fill(Qt::transparent);
+		QPainter p(&pm);
+		p.setRenderHint(QPainter::Antialiasing);
+		QPen pen(palette().color(QPalette::WindowText), 1.4);
+		pen.setJoinStyle(Qt::RoundJoin);
+		pen.setCapStyle(Qt::RoundCap);
+		p.setPen(pen);
+		QPolygonF funnel;
+		funnel << QPointF(3, 4) << QPointF(13, 4) << QPointF(9.5, 9) << QPointF(9.5, 13)
+		       << QPointF(6.5, 13) << QPointF(6.5, 9);
+		p.drawPolygon(funnel);
+		p.end();
+		return QIcon(pm);
+	}
+
+	/* A colour swatch: the node's colour if it has one, otherwise a hue wheel so
+	 * the button always reads as "set colour". */
+	QIcon swatchIcon(const QColor &c) const
+	{
+		const int s = 16;
+		const qreal dpr = devicePixelRatioF();
+		QPixmap pm(qRound(s * dpr), qRound(s * dpr));
+		pm.setDevicePixelRatio(dpr);
+		pm.fill(Qt::transparent);
+		QPainter p(&pm);
+		p.setRenderHint(QPainter::Antialiasing);
+		const QRectF r(2.5, 2.5, 11, 11);
+		if (c.isValid()) {
+			p.setBrush(c);
+		} else {
+			QConicalGradient g(QPointF(8, 8), 90);
+			g.setColorAt(0.00, QColor(0xe8, 0x3a, 0x3a));
+			g.setColorAt(0.25, QColor(0xf2, 0xc4, 0x3d));
+			g.setColorAt(0.50, QColor(0x3f, 0xc3, 0x6b));
+			g.setColorAt(0.75, QColor(0x3a, 0x8f, 0xe8));
+			g.setColorAt(1.00, QColor(0xe8, 0x3a, 0x3a));
+			p.setBrush(g);
+		}
+		p.setPen(QPen(palette().color(QPalette::WindowText), 1.0));
+		p.drawRoundedRect(r, 3, 3);
+		p.end();
+		return QIcon(pm);
+	}
+
+	QHBoxLayout *buildToolbar()
+	{
+		addBtn_ = makeButton(obs_module_text("BSD.Add"));
+		addBtn_->setText(QStringLiteral("＋"));
+		addBtn_->setPopupMode(QToolButton::InstantPopup);
+		/* No drop-down arrow next to the glyph. */
+		addBtn_->setStyleSheet(QStringLiteral("QToolButton::menu-indicator { image: none; }"));
+		auto *addMenu = new QMenu(addBtn_);
+		addMenu->addAction(obs_module_text("BSD.NewScene"), this, [this]() { newScene(); });
+		addMenu->addAction(obs_module_text("BSD.NewFolder"), this,
+				   [this]() { newFolder(selectedNode()); });
+		addMenu->addAction(obs_module_text("BSD.NewDivider"), this,
+				   [this]() { newDivider(selectedNode()); });
+		addBtn_->setMenu(addMenu);
+
+		removeBtn_ = makeButton(obs_module_text("BSD.Remove"));
+		removeBtn_->setText(QStringLiteral("－"));
+
+		colorBtn_ = makeButton(obs_module_text("BSD.SetColor"));
+		colorBtn_->setIconSize(QSize(kIconPx, kIconPx));
+		colorBtn_->setIcon(swatchIcon(QColor()));
+
+		filtersBtn_ = makeButton(obs_module_text("BSD.Filters"));
+		filtersBtn_->setIconSize(QSize(kIconPx, kIconPx));
+		filtersBtn_->setIcon(funnelIcon());
+
+		upBtn_ = makeButton(obs_module_text("BSD.MoveUp"));
+		upBtn_->setText(QStringLiteral("▲"));
+		downBtn_ = makeButton(obs_module_text("BSD.MoveDown"));
+		downBtn_->setText(QStringLiteral("▼"));
+
+		connect(removeBtn_, &QToolButton::clicked, this, [this]() { removeSelected(); });
+		connect(colorBtn_, &QToolButton::clicked, this, [this]() {
+			if (Node *n = selectedNode())
+				setColor(n);
+		});
+		connect(filtersBtn_, &QToolButton::clicked, this, [this]() { openFilters(); });
+		connect(upBtn_, &QToolButton::clicked, this, [this]() { moveSelected(-1); });
+		connect(downBtn_, &QToolButton::clicked, this, [this]() { moveSelected(+1); });
+
+		auto *bar = new QHBoxLayout();
+		bar->setContentsMargins(4, 2, 4, 2);
+		bar->setSpacing(2);
+		bar->addWidget(addBtn_);
+		bar->addWidget(removeBtn_);
+		bar->addWidget(colorBtn_);
+		bar->addWidget(filtersBtn_);
+		bar->addStretch();
+		bar->addWidget(upBtn_);
+		bar->addWidget(downBtn_);
+		return bar;
+	}
+
+	void updateToolbar()
+	{
+		Node *n = selectedNode();
+		const bool isScene = n && n->type == NodeType::Scene;
+		removeBtn_->setEnabled(n != nullptr);
+		colorBtn_->setEnabled(n != nullptr);
+		colorBtn_->setIcon(swatchIcon(n ? QColor(QString::fromStdString(n->color)) : QColor()));
+		filtersBtn_->setEnabled(isScene);
+		bool canUp = false, canDown = false;
+		if (n) {
+			Node *parent = model_.find_parent(n);
+			if (parent) {
+				auto &ch = parent->children;
+				for (int i = 0; i < (int)ch.size(); i++) {
+					if (ch[i].get() == n) {
+						canUp = i > 0;
+						canDown = i < (int)ch.size() - 1;
+						break;
+					}
+				}
+			}
+		}
+		upBtn_->setEnabled(canUp);
+		downBtn_->setEnabled(canDown);
+	}
+
+	Node *selectedNode() { return nodeOf(tree_->currentItem()); }
+
+	void selectNodeById(const std::string &id)
+	{
+		QTreeWidgetItemIterator it(tree_);
+		for (; *it; ++it) {
+			if ((*it)->data(0, NodeIdRole).toString().toStdString() == id) {
+				tree_->setCurrentItem(*it);
+				return;
+			}
+		}
+	}
 
 	Node *nodeOf(QTreeWidgetItem *item)
 	{
@@ -223,6 +403,7 @@ private:
 			addNode(*child, nullptr);
 		updating_ = false;
 		updateHighlight();
+		updateToolbar();
 	}
 
 	void addNode(Node &n, QTreeWidgetItem *parentItem)
@@ -233,10 +414,10 @@ private:
 		item->setData(0, NodeColorRole, QString::fromStdString(n.color));
 		item->setText(0, QString::fromStdString(n.name));
 
-		Qt::ItemFlags flags = Qt::ItemIsEnabled;
-		if (n.type != NodeType::Divider)
-			flags |= Qt::ItemIsSelectable;
-		item->setFlags(flags);
+		/* Dividers are selectable too (so they can be moved / colored /
+		 * removed via the toolbar); clicking one just never switches a
+		 * scene — activate() ignores non-scene nodes. */
+		item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
 
 		if (parentItem)
 			parentItem->addChild(item);
@@ -298,8 +479,9 @@ private:
 			}
 		}
 
+		/* Only repaint the program/preview indicators; never hijack the
+		 * user's selection or scroll position. */
 		QTreeWidgetItemIterator it(tree_);
-		QTreeWidgetItem *active = nullptr;
 		for (; *it; ++it) {
 			QTreeWidgetItem *item = *it;
 			if (item->data(0, NodeTypeRole).toInt() != (int)NodeType::Scene)
@@ -311,13 +493,6 @@ private:
 			else if (studio && name == preview)
 				state = 2;
 			item->setData(0, NodeStateRole, state);
-			if ((studio && state == 2) || (!studio && state == 1))
-				active = item;
-		}
-		if (active) {
-			updating_ = true;
-			tree_->setCurrentItem(active);
-			updating_ = false;
 		}
 		tree_->viewport()->update();
 	}
@@ -438,6 +613,109 @@ private:
 		n->color = c.name().toStdString();
 		save();
 		rebuild();
+	}
+
+	/* ---- toolbar actions ---- */
+
+	std::string uniqueSceneName(const std::string &base)
+	{
+		std::string name = base;
+		int n = 2;
+		for (;;) {
+			obs_source_t *s = obs_get_source_by_name(name.c_str());
+			if (!s)
+				return name;
+			obs_source_release(s);
+			name = base + " " + std::to_string(n++);
+		}
+	}
+
+	void newScene()
+	{
+		bool ok = false;
+		const QString input = QInputDialog::getText(this, obs_module_text("BSD.NewScene"),
+							    obs_module_text("BSD.SceneNamePrompt"), QLineEdit::Normal,
+							    obs_module_text("BSD.SceneDefault"), &ok);
+		if (!ok)
+			return;
+		std::string base = input.trimmed().toStdString();
+		if (base.empty())
+			base = obs_module_text("BSD.SceneDefault");
+		const std::string name = uniqueSceneName(base);
+
+		obs_scene_t *scene = obs_scene_create(name.c_str());
+		if (!scene)
+			return;
+		obs_scene_release(scene);
+
+		/* Pull the new scene into the model now (the frontend event is
+		 * queued) and place it right after the current selection. */
+		model_.reconcile_with_obs();
+		if (Node *sel = selectedNode()) {
+			Node *newNode = model_.find(name);
+			Node *parent = sel->is_container() ? sel : model_.find_parent(sel);
+			if (newNode && parent) {
+				int idx = (int)parent->children.size();
+				for (int i = 0; i < (int)parent->children.size(); i++) {
+					if (parent->children[i].get() == sel) {
+						idx = i + 1;
+						break;
+					}
+				}
+				model_.move_node(newNode, parent, idx);
+			}
+		}
+		save();
+		rebuild();
+		selectNodeById(name);
+	}
+
+	void removeSelected()
+	{
+		Node *n = selectedNode();
+		if (!n)
+			return;
+
+		if (n->type == NodeType::Scene) {
+			obs_source_t *scene = obs_get_source_by_name(n->name.c_str());
+			if (!scene)
+				return;
+			const auto reply = QMessageBox::question(
+				this, obs_module_text("BSD.Remove"),
+				QString(obs_module_text("BSD.ConfirmRemoveScene")).arg(QString::fromStdString(n->name)));
+			if (reply == QMessageBox::Yes)
+				obs_source_remove(scene); // SCENE_LIST_CHANGED -> reconcile + rebuild
+			obs_source_release(scene);
+		} else {
+			model_.remove_node(n);
+			save();
+			rebuild();
+		}
+	}
+
+	void openFilters()
+	{
+		Node *n = selectedNode();
+		if (!n || n->type != NodeType::Scene)
+			return;
+		obs_source_t *scene = obs_get_source_by_name(n->name.c_str());
+		if (scene) {
+			obs_frontend_open_source_filters(scene);
+			obs_source_release(scene);
+		}
+	}
+
+	void moveSelected(int delta)
+	{
+		Node *n = selectedNode();
+		if (!n)
+			return;
+		const std::string id = n->id;
+		if (model_.move_within_parent(n, delta)) {
+			save();
+			rebuild();
+			selectNodeById(id);
+		}
 	}
 
 	/* ---- native dock ---- */

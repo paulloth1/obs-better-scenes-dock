@@ -22,11 +22,12 @@ scenes, folders and dividers.
 - Labeled **dividers** (lines with optional text)
 - **Colors** for scenes, folders and dividers
 - Current program scene (red) / preview scene (green) indicators
+- Bottom **toolbar**: add (scene / folder / divider), remove, set color, open
+  scene filters, and reorder up/down — plus a full right-click context menu
 - Structure persists per scene collection
 
-> Status: early version (v0.2). Adding/removing/renaming scenes and drag & drop
-> are coming next; for now use the right-click menu to create folders/dividers,
-> set colors and move items.
+> Status: early version (v0.2). Drag & drop, scene duplication and in-place
+> renaming are coming next.
 
 ## How it works
 
@@ -38,8 +39,10 @@ takes its place (you can bring the native one back from the Docks menu).
 
 ## Installation
 
-Currently macOS only (Windows/Linux planned). Copy `better-scenes-dock.plugin`
-to:
+Grab the build for your platform from the
+[Releases](https://github.com/paulloth1/obs-better-scenes-dock/releases) page
+(macOS, Windows and Linux are built by CI). On macOS, copy
+`better-scenes-dock.plugin` to:
 
 ```
 ~/Library/Application Support/obs-studio/plugins/

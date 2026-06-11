@@ -96,13 +96,15 @@ data/locale/{en-US,de-DE}.ini
       Ordner/Trenner anlegen, einklappen, einfärben; Verschieben per Kontextmenü;
       Struktur überlebt Neustart + Collection-Wechsel.
       *DoD: alles live funktionsfähig in OBS 32.1.2.*
-- [ ] **Phase 2 — Volle Szenen-Bedienung**
-      Szene anlegen/duplizieren/löschen/umbenennen aus dem Dock; **Drag&Drop**
-      (Sortieren + in/aus Ordner ziehen); Doppelklick-Umbenennen; Rename-Sync,
-      wenn Szenen extern umbenannt werden.
-- [ ] **Phase 3 — Parität & Politur**
-      Kontextmenü-Parität zum nativen (Filter, Übergangs-Override, Projektor,
-      Screenshot …), Toolbar (+/−), Suchfeld, Studio-Modus-Feinschliff.
+- [~] **Phase 2 — Volle Szenen-Bedienung** (teilweise)
+      ✅ Szene anlegen/löschen aus dem Dock (Toolbar `＋`/`－`); ✅ Hoch/Runter-
+      Sortieren innerhalb des Elternknotens (Toolbar `▲`/`▼`).
+      Offen: Duplizieren/Umbenennen aus dem Dock, **Drag&Drop** (Sortieren + in/aus
+      Ordner ziehen), Doppelklick-Umbenennen, Rename-Sync bei externer Umbenennung.
+- [~] **Phase 3 — Parität & Politur** (teilweise)
+      ✅ Toolbar (`＋`/`－`/`⚙`/`▲`/`▼`); ✅ Szenenfilter öffnen (`⚙`).
+      Offen: restliche Kontextmenü-Parität zum nativen (Übergangs-Override,
+      Projektor, Screenshot …), Suchfeld, Studio-Modus-Feinschliff.
 - [ ] **Phase 4 — Release**
       Win/Linux-CI-Builds, README/Screenshots, GitHub-Release.
 
@@ -133,6 +135,14 @@ data/locale/{en-US,de-DE}.ini
   Modell + Dock implementiert (v1 minimal), baut & linkt sauber. Projekt-Identität
   auf `better-scenes-dock`/`0.2.0` umgestellt; alte `sd-*`-Quellen entfernt.
   *Nächster Schritt: OBS neu starten, Dock interaktiv testen.*
+- **2026-06-11** — **Toolbar am Dock-Fuß** (`＋`/`－`/`⚙`/`▲`/`▼`, NLE-Look wie das
+  native Dock). `＋` ist ein Menü (Neue Szene / Neuer Ordner / Neuer Trenner), `－`
+  entfernt den selektierten Knoten (Szene mit Bestätigungsdialog → `obs_source_remove`,
+  Ordner/Trenner direkt), `⚙` öffnet die Szenenfilter, `▲`/`▼` sortieren innerhalb
+  des Elternknotens (`Model::move_within_parent`). Trenner sind jetzt selektierbar
+  (für Toolbar-Aktionen), schalten beim Klick aber keine Szene. `updateHighlight()`
+  kapert nicht mehr die Selektion/Scrollposition. Baut & installiert grün.
+  Zieht Teile von Phase 2/3 vor. *Noch ungetestet in OBS — Neustart nötig.*
 - *(Historie der Scene-Dividers-Phase: siehe git-Log vor diesem Commit.)*
 
 ---
