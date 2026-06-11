@@ -4,15 +4,9 @@ A drop-in replacement for the OBS scene list with the structure it has always
 been missing: **nested folders**, **collapsible dividers** and **colors** for
 scenes, folders and dividers.
 
-```
-▼ 📁 GAME              (green)
-     Gameplay
-     Gameplay + Cam
-  ▶ 📁 Replays  (3)
-  ── BREAK ───────────
-     BRB
-     Pause
-```
+<p align="center">
+  <img src="docs/images/better-scenes-dock.png" alt="The Better Scenes dock showing colored scenes, a folder, a divider and the right-click menu" width="440">
+</p>
 
 ## Features
 
