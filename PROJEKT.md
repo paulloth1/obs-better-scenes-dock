@@ -5,7 +5,7 @@
 > plus verschachtelbare **Ordner**, einklappbare **Trenner** und **Farben** für
 > Szenen, Ordner und Trenner.
 
-Letzte Aktualisierung: 2026-06-11 · GitHub-Repo (geplant): **obs-better-scenes-dock**
+Letzte Aktualisierung: 2026-06-11 · v1.0.0 · GitHub-Repo: **github.com/paulloth1/obs-better-scenes-dock** (öffentlich)
 
 ---
 
@@ -91,22 +91,23 @@ data/locale/{en-US,de-DE}.ini
       Projekt auf `better-scenes-dock` umgestellt, altes Scene-Dividers-/Native-
       Listen-Coding entfernt. Modell + Dock implementiert, baut grün, nur
       libc++/libSystem gelinkt. *Offen: erster interaktiver Test in OBS.*
-- [ ] **Phase 1 — v1 minimal verifizieren** (Test durch Nutzer)
+- [x] **Phase 1 — v1 minimal verifiziert** ✅ (2026-06-11, vom Nutzer getestet)
       Dock ersetzt native Liste; Szenen anzeigen/wechseln (inkl. Studio-Preview);
       Ordner/Trenner anlegen, einklappen, einfärben; Verschieben per Kontextmenü;
       Struktur überlebt Neustart + Collection-Wechsel.
-      *DoD: alles live funktionsfähig in OBS 32.1.2.*
 - [~] **Phase 2 — Volle Szenen-Bedienung** (teilweise)
-      ✅ Szene anlegen/löschen aus dem Dock (Toolbar `＋`/`－`); ✅ Hoch/Runter-
-      Sortieren innerhalb des Elternknotens (Toolbar `▲`/`▼`).
-      Offen: Duplizieren/Umbenennen aus dem Dock, **Drag&Drop** (Sortieren + in/aus
-      Ordner ziehen), Doppelklick-Umbenennen, Rename-Sync bei externer Umbenennung.
-- [~] **Phase 3 — Parität & Politur** (teilweise)
-      ✅ Toolbar (`＋`/`－`/`⚙`/`▲`/`▼`); ✅ Szenenfilter öffnen (`⚙`).
-      Offen: restliche Kontextmenü-Parität zum nativen (Übergangs-Override,
-      Projektor, Screenshot …), Suchfeld, Studio-Modus-Feinschliff.
-- [ ] **Phase 4 — Release**
-      Win/Linux-CI-Builds, README/Screenshots, GitHub-Release.
+      ✅ Szene anlegen/löschen/duplizieren/umbenennen aus dem Dock; ✅ Hoch/Runter-
+      Sortieren innerhalb des Elternknotens. Rename hält den Knoten an Ort & Stelle
+      (id == Szenenname). Offen: **Drag&Drop** (Sortieren + in/aus Ordner ziehen),
+      Doppelklick-Umbenennen, Rename-Sync bei externer Umbenennung.
+- [x] **Phase 3 — Parität & Politur** ✅ (2026-06-11)
+      ✅ Toolbar (`＋`/`－`/Farbe/Filter/`▲`/`▼`); ✅ volle Szenen-Kontextmenü-Parität:
+      Projektor (Fenster/Monitor-Vollbild), Übergang überschreiben (inkl. Dauer-
+      Spinbox), Szenen-Screenshot, Filter kopieren/einfügen, Filter öffnen.
+      Offen (Politur, nicht release-blockierend): Suchfeld, Studio-Modus-Feinschliff.
+- [x] **Phase 4 — Release v1.0.0** ✅ (2026-06-11)
+      Version 0.2.0 → 1.0.0; Tag `1.0.0` löst Template-CI (macOS/Windows/Ubuntu) +
+      Draft-Release mit Downloads aus. README aktualisiert.
 
 ---
 
@@ -143,6 +144,18 @@ data/locale/{en-US,de-DE}.ini
   (für Toolbar-Aktionen), schalten beim Klick aber keine Szene. `updateHighlight()`
   kapert nicht mehr die Selektion/Scrollposition. Baut & installiert grün.
   Zieht Teile von Phase 2/3 vor. *Noch ungetestet in OBS — Neustart nötig.*
+- **2026-06-11** — **Toolbar-Politur + öffentliches Repo.** `＋`-Dropdown-Pfeil
+  entfernt, Farb-Button (Live-Swatch der Auswahl) ergänzt, Zahnrad durch selbst
+  gezeichnetes Filter-Trichter-Icon ersetzt (konsistente Größe, Theme-Farbe). Repo
+  **öffentlich** auf `github.com/paulloth1/obs-better-scenes-dock`; Template-CI baut
+  macOS/Windows/Ubuntu.
+- **2026-06-11** — **V1-Kontextmenü (Szenen).** Volle Parität zum nativen Dock über
+  Frontend-API: Umbenennen (hält Knoten in place), Duplizieren (`obs_scene_duplicate`
+  REFS), Szenen-Projektor (Fenster/Monitor-Vollbild via `QGuiApplication::screens`),
+  Übergang überschreiben (Privat-Settings `transition`/`transition_duration` + Dauer-
+  Spinbox, OBS-Default 300 ms), Szenen-Screenshot, Filter kopieren/einfügen
+  (`obs_source_copy_filters`). Alle Signaturen gegen OBS 32.1.2 verifiziert. Vom
+  Nutzer getestet & abgenommen → **Release v1.0.0** (Version gebumpt, Tag `1.0.0`).
 - *(Historie der Scene-Dividers-Phase: siehe git-Log vor diesem Commit.)*
 
 ---

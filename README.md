@@ -23,11 +23,11 @@ scenes, folders and dividers.
 - **Colors** for scenes, folders and dividers
 - Current program scene (red) / preview scene (green) indicators
 - Bottom **toolbar**: add (scene / folder / divider), remove, set color, open
-  scene filters, and reorder up/down — plus a full right-click context menu
+  scene filters, and reorder up/down
+- Full right-click **scene menu** matching the native dock: rename, duplicate,
+  scene projector (windowed / per-monitor fullscreen), transition override (with
+  duration), save scene screenshot, copy/paste filters
 - Structure persists per scene collection
-
-> Status: early version (v0.2). Drag & drop, scene duplication and in-place
-> renaming are coming next.
 
 ## How it works
 
