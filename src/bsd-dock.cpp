@@ -21,9 +21,11 @@ the Free Software Foundation; either version 2 of the License, or
 #include "bsd-dock.hpp"
 #include "bsd-model.hpp"
 
+#include <obs.h>
 #include <obs-frontend-api.h>
 #include <obs-module.h>
 #include <plugin-support.h>
+#include <util/platform.h>
 
 #include <QColor>
 #include <QColorDialog>
@@ -34,7 +36,10 @@ the Free Software Foundation; either version 2 of the License, or
 #include <QIcon>
 #include <QInputDialog>
 #include <QLabel>
+#include <QLineEdit>
+#include <QListWidget>
 #include <QScreen>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QWidgetAction>
 #include <QMainWindow>
@@ -52,6 +57,7 @@ the Free Software Foundation; either version 2 of the License, or
 #include <QVBoxLayout>
 
 #include <string>
+#include <vector>
 
 namespace bsd {
 
@@ -60,7 +66,32 @@ enum {
 	NodeTypeRole,
 	NodeColorRole,
 	NodeStateRole, // 0 none, 1 program, 2 preview
+	NodeCountRole, // folders: number of scene descendants
 };
+
+/* Plugin-wide preferences (global, not per scene collection). */
+struct Settings {
+	bool showSearch = true;
+	bool duplicateCopies = false; // Duplicate makes full copies instead of refs
+};
+
+/* Total scenes anywhere under a node (used for the folder count badge). */
+static int scene_count(const Node &n)
+{
+	int c = (n.type == NodeType::Scene) ? 1 : 0;
+	for (auto &ch : n.children)
+		c += scene_count(*ch);
+	return c;
+}
+
+/* Scene names in dock (depth-first) order — the order we push to OBS. */
+static void collect_scene_order(const Node &n, std::vector<std::string> &out)
+{
+	if (n.type == NodeType::Scene)
+		out.push_back(n.name);
+	for (auto &c : n.children)
+		collect_scene_order(*c, out);
+}
 
 static std::string current_collection()
 {
@@ -137,6 +168,18 @@ public:
 			p->fillRect(QRect(option.rect.left(), option.rect.top(), 3, option.rect.height()), bar);
 			p->restore();
 		}
+
+		/* Folder scene-count badge, right-aligned and muted. */
+		if (type == (int)NodeType::Folder) {
+			const int count = index.data(NodeCountRole).toInt();
+			if (count > 0) {
+				p->save();
+				p->setPen(option.palette.color(QPalette::Disabled, QPalette::Text));
+				p->drawText(option.rect.adjusted(0, 0, -8, 0), Qt::AlignRight | Qt::AlignVCenter,
+					    QString::number(count));
+				p->restore();
+			}
+		}
 	}
 };
 
@@ -146,6 +189,13 @@ class BetterScenesDock : public QWidget {
 public:
 	explicit BetterScenesDock(QWidget *parent = nullptr) : QWidget(parent)
 	{
+		loadSettings();
+
+		search_ = new QLineEdit(this);
+		search_->setClearButtonEnabled(true);
+		search_->setPlaceholderText(obs_module_text("BSD.SearchPlaceholder"));
+		connect(search_, &QLineEdit::textChanged, this, [this](const QString &t) { filterTree(t); });
+
 		tree_ = new QTreeWidget(this);
 		tree_->setHeaderHidden(true);
 		tree_->setRootIsDecorated(true);
@@ -161,10 +211,13 @@ public:
 		auto *layout = new QVBoxLayout(this);
 		layout->setContentsMargins(0, 0, 0, 0);
 		layout->setSpacing(0);
+		layout->addWidget(search_);
 		layout->addWidget(tree_);
 		layout->addLayout(toolbar);
 
 		connect(tree_, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem *it, int) { activate(it); });
+		connect(tree_, &QTreeWidget::itemDoubleClicked, this,
+			[this](QTreeWidgetItem *it, int) { transitionTo(it); });
 		connect(tree_, &QTreeWidget::itemExpanded, this,
 			[this](QTreeWidgetItem *it) { setCollapsed(it, false); });
 		connect(tree_, &QTreeWidget::itemCollapsed, this,
@@ -173,12 +226,23 @@ public:
 			[this](const QPoint &pos) { showMenu(pos); });
 		connect(tree_, &QTreeWidget::itemSelectionChanged, this, [this]() { updateToolbar(); });
 
+		/* Keep folder placement when a scene is renamed outside the dock. */
+		signal_handler_connect(obs_get_signal_handler(), "source_rename", &BetterScenesDock::onSourceRename,
+				       this);
+
 		collection_ = current_collection();
 		model_.load_for_collection(collection_);
 		model_.reconcile_with_obs();
 		rebuild();
 		updateToolbar();
+		applySearchVisibility();
 		hideNativeDock();
+	}
+
+	~BetterScenesDock() override
+	{
+		signal_handler_disconnect(obs_get_signal_handler(), "source_rename", &BetterScenesDock::onSourceRename,
+					  this);
 	}
 
 	void onFrontendEvent(enum obs_frontend_event event)
@@ -222,18 +286,94 @@ public:
 
 private:
 	QTreeWidget *tree_;
+	QLineEdit *search_ = nullptr;
 	QToolButton *addBtn_ = nullptr;
 	QToolButton *removeBtn_ = nullptr;
 	QToolButton *colorBtn_ = nullptr;
 	QToolButton *filtersBtn_ = nullptr;
 	QToolButton *upBtn_ = nullptr;
 	QToolButton *downBtn_ = nullptr;
+	QToolButton *settingsBtn_ = nullptr;
 	Model model_;
+	Settings settings_;
 	std::string collection_;
 	std::string copiedFiltersSource_; // scene whose filters were last copied
 	bool updating_ = false;
 
 	void save() { model_.save_for_collection(collection_); }
+
+	/* ---- settings persistence (own JSON in the module config dir) ---- */
+
+	void loadSettings()
+	{
+		char *path = obs_module_config_path("settings.json");
+		if (!path)
+			return;
+		obs_data_t *d = obs_data_create_from_json_file(path);
+		bfree(path);
+		if (!d)
+			return;
+		obs_data_set_default_bool(d, "show_search", true);
+		settings_.showSearch = obs_data_get_bool(d, "show_search");
+		settings_.duplicateCopies = obs_data_get_bool(d, "duplicate_copies");
+		obs_data_release(d);
+	}
+
+	void saveSettings()
+	{
+		if (char *dir = obs_module_config_path("")) {
+			os_mkdirs(dir);
+			bfree(dir);
+		}
+		char *path = obs_module_config_path("settings.json");
+		if (!path)
+			return;
+		obs_data_t *d = obs_data_create();
+		obs_data_set_bool(d, "show_search", settings_.showSearch);
+		obs_data_set_bool(d, "duplicate_copies", settings_.duplicateCopies);
+		obs_data_save_json(d, path);
+		obs_data_release(d);
+		bfree(path);
+	}
+
+	/* ---- search / filter ---- */
+
+	void applySearchVisibility()
+	{
+		if (!search_)
+			return;
+		search_->setVisible(settings_.showSearch);
+		if (!settings_.showSearch && !search_->text().isEmpty())
+			search_->clear(); // textChanged -> filterTree("") unhides everything
+	}
+
+	void filterTree(const QString &query)
+	{
+		const QString q = query.trimmed();
+		for (int i = 0; i < tree_->topLevelItemCount(); i++)
+			filterItem(tree_->topLevelItem(i), q, false);
+	}
+
+	/* Returns true if the item (or a descendant) is visible. `force` keeps a
+	 * whole subtree visible when its folder name matched. */
+	bool filterItem(QTreeWidgetItem *item, const QString &q, bool force)
+	{
+		const int type = item->data(0, NodeTypeRole).toInt();
+		const bool empty = q.isEmpty();
+		bool selfMatch = force || empty;
+		if (!selfMatch && (type == (int)NodeType::Scene || type == (int)NodeType::Folder))
+			selfMatch = item->text(0).contains(q, Qt::CaseInsensitive);
+		const bool childForce = force || (!empty && type == (int)NodeType::Folder && selfMatch);
+		bool childMatch = false;
+		for (int i = 0; i < item->childCount(); i++)
+			childMatch |= filterItem(item->child(i), q, childForce);
+
+		const bool visible = (type == (int)NodeType::Divider) ? (empty || force) : (selfMatch || childMatch);
+		item->setHidden(!visible);
+		if (!empty && type == (int)NodeType::Folder && (childMatch || childForce))
+			item->setExpanded(true);
+		return visible;
+	}
 
 	/* ---- toolbar ---- */
 
@@ -332,10 +472,20 @@ private:
 		downBtn_ = makeButton(obs_module_text("BSD.MoveDown"));
 		downBtn_->setText(QStringLiteral("▼"));
 
+		settingsBtn_ = makeButton(obs_module_text("BSD.Settings"));
+		settingsBtn_->setText(QStringLiteral("⋯"));
+		settingsBtn_->setPopupMode(QToolButton::InstantPopup);
+		settingsBtn_->setStyleSheet(QStringLiteral("QToolButton::menu-indicator { image: none; }"));
+		settingsBtn_->setMenu(buildSettingsMenu());
+
 		connect(removeBtn_, &QToolButton::clicked, this, [this]() { removeSelected(); });
 		connect(colorBtn_, &QToolButton::clicked, this, [this]() {
-			if (Node *n = selectedNode())
-				setColor(n);
+			Node *n = selectedNode();
+			if (!n)
+				return;
+			QMenu m(this);
+			buildColorMenu(&m, n);
+			m.exec(colorBtn_->mapToGlobal(QPoint(0, colorBtn_->height())));
 		});
 		connect(filtersBtn_, &QToolButton::clicked, this, [this]() { openFilters(); });
 		connect(upBtn_, &QToolButton::clicked, this, [this]() { moveSelected(-1); });
@@ -351,7 +501,31 @@ private:
 		bar->addStretch();
 		bar->addWidget(upBtn_);
 		bar->addWidget(downBtn_);
+		bar->addWidget(settingsBtn_);
 		return bar;
+	}
+
+	QMenu *buildSettingsMenu()
+	{
+		auto *m = new QMenu(this);
+		auto *aSearch = m->addAction(obs_module_text("BSD.ShowSearch"));
+		auto *aDup = m->addAction(obs_module_text("BSD.DuplicateCopies"));
+		for (QAction *a : {aSearch, aDup})
+			a->setCheckable(true);
+		connect(m, &QMenu::aboutToShow, this, [this, aSearch, aDup]() {
+			aSearch->setChecked(settings_.showSearch);
+			aDup->setChecked(settings_.duplicateCopies);
+		});
+		connect(aSearch, &QAction::toggled, this, [this](bool on) {
+			settings_.showSearch = on;
+			saveSettings();
+			applySearchVisibility();
+		});
+		connect(aDup, &QAction::toggled, this, [this](bool on) {
+			settings_.duplicateCopies = on;
+			saveSettings();
+		});
+		return m;
 	}
 
 	void updateToolbar()
@@ -411,6 +585,9 @@ private:
 		updating_ = false;
 		updateHighlight();
 		updateToolbar();
+		if (search_ && !search_->text().trimmed().isEmpty())
+			filterTree(search_->text());
+		syncSceneOrderToObs();
 	}
 
 	void addNode(Node &n, QTreeWidgetItem *parentItem)
@@ -432,10 +609,83 @@ private:
 			tree_->addTopLevelItem(item);
 
 		if (n.is_container()) {
+			if (n.type == NodeType::Folder)
+				item->setData(0, NodeCountRole, scene_count(n));
 			for (auto &c : n.children)
 				addNode(*c, item);
 			item->setExpanded(!n.collapsed);
 		}
+	}
+
+	QListWidget *nativeSceneList()
+	{
+		auto *main = static_cast<QMainWindow *>(obs_frontend_get_main_window());
+		return main ? main->findChild<QListWidget *>("scenes") : nullptr;
+	}
+
+	/* Tell OBS to rebuild its multiview projectors (it connects the scene
+	 * list's "scenesReordered" signal to UpdateMultiviewProjectors). */
+	void refreshMultiview()
+	{
+		if (QListWidget *list = nativeSceneList())
+			QMetaObject::invokeMethod(list, "scenesReordered", Qt::QueuedConnection);
+	}
+
+	/* OBS' native per-scene multiview flag (private setting, defaults to on). */
+	bool sceneShowsInMultiview(const std::string &name)
+	{
+		bool show = true;
+		if (obs_source_t *s = obs_get_source_by_name(name.c_str())) {
+			obs_data_t *d = obs_source_get_private_settings(s);
+			obs_data_set_default_bool(d, "show_in_multiview", true);
+			show = obs_data_get_bool(d, "show_in_multiview");
+			obs_data_release(d);
+			obs_source_release(s);
+		}
+		return show;
+	}
+
+	void setShowInMultiview(const std::string &name, bool show)
+	{
+		if (obs_source_t *s = obs_get_source_by_name(name.c_str())) {
+			obs_data_t *d = obs_source_get_private_settings(s);
+			obs_data_set_bool(d, "show_in_multiview", show);
+			obs_data_release(d);
+			obs_source_release(s);
+		}
+		refreshMultiview();
+	}
+
+	/* Mirror the dock's scene order into OBS' (hidden) scene list, which is
+	 * what obs_frontend_get_scenes, the saved scene_order and Multiview all
+	 * read from. Always on — the dock order is the source of truth. */
+	void syncSceneOrderToObs()
+	{
+		QListWidget *list = nativeSceneList();
+		if (!list)
+			return;
+		std::vector<std::string> order;
+		collect_scene_order(model_.root, order);
+
+		bool moved = false;
+		{
+			const QSignalBlocker block(list);
+			int target = 0;
+			for (const auto &name : order) {
+				for (int i = target; i < list->count(); i++) {
+					if (list->item(i)->text().toStdString() == name) {
+						if (i != target) {
+							list->insertItem(target, list->takeItem(i));
+							moved = true;
+						}
+						target++;
+						break;
+					}
+				}
+			}
+		}
+		if (moved)
+			refreshMultiview(); // keep multiview order in step with the dock
 	}
 
 	/* ---- interaction ---- */
@@ -453,6 +703,23 @@ private:
 				obs_frontend_set_current_preview_scene(scene);
 			else
 				obs_frontend_set_current_scene(scene);
+			obs_source_release(scene);
+		}
+	}
+
+	/* Studio Mode: a single click set this scene as preview; double-click
+	 * transitions it to program (matching the native scene list). Outside
+	 * Studio Mode the single click already switched program, so do nothing. */
+	void transitionTo(QTreeWidgetItem *item)
+	{
+		if (updating_ || !obs_frontend_preview_program_mode_active())
+			return;
+		Node *n = nodeOf(item);
+		if (!n || n->type != NodeType::Scene)
+			return;
+		obs_source_t *scene = obs_get_source_by_name(n->name.c_str());
+		if (scene) {
+			obs_frontend_set_current_scene(scene);
 			obs_source_release(scene);
 		}
 	}
@@ -522,13 +789,8 @@ private:
 			if (n->type == NodeType::Scene)
 				addSceneActions(menu, n);
 
-			menu.addAction(obs_module_text("BSD.SetColor"), this, [this, n]() { setColor(n); });
-			if (!n->color.empty())
-				menu.addAction(obs_module_text("BSD.ClearColor"), this, [this, n]() {
-					n->color.clear();
-					save();
-					rebuild();
-				});
+			QMenu *colorMenu = menu.addMenu(obs_module_text("BSD.SetColor"));
+			buildColorMenu(colorMenu, n);
 
 			QMenu *moveMenu = menu.addMenu(obs_module_text("BSD.MoveTo"));
 			addMoveTargets(moveMenu, &model_.root, n, 0);
@@ -568,6 +830,11 @@ private:
 				obs_source_release(s);
 			}
 		});
+
+		QAction *mv = menu.addAction(obs_module_text("BSD.ShowInMultiview"), this,
+					     [this, name](bool on) { setShowInMultiview(name, on); });
+		mv->setCheckable(true);
+		mv->setChecked(sceneShowsInMultiview(name));
 
 		menu.addSeparator();
 		menu.addAction(obs_module_text("BSD.Filters"), this, [name]() {
@@ -681,7 +948,8 @@ private:
 			return;
 		}
 		const std::string name = uniqueSceneName(n->name);
-		obs_scene_t *dup = obs_scene_duplicate(scene, name.c_str(), OBS_SCENE_DUP_REFS);
+		const auto dupType = settings_.duplicateCopies ? OBS_SCENE_DUP_COPY : OBS_SCENE_DUP_REFS;
+		obs_scene_t *dup = obs_scene_duplicate(scene, name.c_str(), dupType);
 		obs_source_release(src);
 		if (!dup)
 			return;
@@ -795,6 +1063,34 @@ private:
 		selectNodeById(n->id);
 	}
 
+	/* libobs global "source_rename" hook — fires for any source on any thread.
+	 * Marshal to the GUI thread and keep the scene's folder placement. */
+	static void onSourceRename(void *data, calldata_t *cd)
+	{
+		auto *self = static_cast<BetterScenesDock *>(data);
+		obs_source_t *src = (obs_source_t *)calldata_ptr(cd, "source");
+		if (!src || obs_source_get_type(src) != OBS_SOURCE_TYPE_SCENE)
+			return;
+		const char *prev = calldata_string(cd, "prev_name");
+		const char *next = calldata_string(cd, "new_name");
+		if (!prev || !next || prev == std::string(next))
+			return;
+		std::string p = prev, n = next;
+		QMetaObject::invokeMethod(
+			self, [self, p, n]() { self->handleExternalRename(p, n); }, Qt::QueuedConnection);
+	}
+
+	void handleExternalRename(const std::string &prev, const std::string &next)
+	{
+		Node *node = model_.find(prev); // scene id == scene name
+		if (!node || node->type != NodeType::Scene)
+			return; // our own in-dock rename already updated the node
+		node->id = next;
+		node->name = next;
+		save();
+		rebuild();
+	}
+
 	void setColor(Node *n)
 	{
 		QColor initial(QString::fromStdString(n->color));
@@ -805,6 +1101,47 @@ private:
 		n->color = c.name().toStdString();
 		save();
 		rebuild();
+	}
+
+	void applyColor(Node *n, const QColor &c)
+	{
+		n->color = c.isValid() ? c.name().toStdString() : std::string();
+		save();
+		rebuild();
+	}
+
+	/* A preset swatch row + Custom…/Clear, shared by the toolbar colour button
+	 * and the context menu. */
+	void buildColorMenu(QMenu *menu, Node *n)
+	{
+		static const char *presets[] = {"#e6433b", "#e67e22", "#f1c40f", "#2ecc71",
+						"#1abc9c", "#3a8fe8", "#9b59b6", "#e84393"};
+		auto *row = new QWidget(menu);
+		auto *hl = new QHBoxLayout(row);
+		hl->setContentsMargins(6, 4, 6, 4);
+		hl->setSpacing(4);
+		for (const char *hex : presets) {
+			const QColor c(hex);
+			auto *b = new QToolButton(row);
+			b->setAutoRaise(true);
+			b->setFocusPolicy(Qt::NoFocus);
+			b->setIconSize(QSize(kIconPx, kIconPx));
+			b->setIcon(swatchIcon(c));
+			b->setToolTip(QString::fromUtf8(hex));
+			connect(b, &QToolButton::clicked, this, [this, n, c, menu]() {
+				applyColor(n, c);
+				menu->close();
+			});
+			hl->addWidget(b);
+		}
+		auto *wa = new QWidgetAction(menu);
+		wa->setDefaultWidget(row);
+		menu->addAction(wa);
+		menu->addSeparator();
+		menu->addAction(obs_module_text("BSD.CustomColor"), this, [this, n]() { setColor(n); });
+		if (!n->color.empty())
+			menu->addAction(obs_module_text("BSD.ClearColor"), this,
+					[this, n]() { applyColor(n, QColor()); });
 	}
 
 	/* ---- toolbar actions ---- */

@@ -5,7 +5,7 @@
 > plus verschachtelbare **Ordner**, einklappbare **Trenner** und **Farben** für
 > Szenen, Ordner und Trenner.
 
-Letzte Aktualisierung: 2026-06-11 · v1.0.0 · GitHub-Repo: **github.com/paulloth1/obs-better-scenes-dock** (öffentlich)
+Letzte Aktualisierung: 2026-06-12 · v1.1.0 · GitHub-Repo: **github.com/paulloth1/obs-better-scenes-dock** (öffentlich)
 
 ---
 
@@ -108,21 +108,31 @@ data/locale/{en-US,de-DE}.ini
 - [x] **Phase 4 — Release v1.0.0** ✅ (2026-06-11)
       Version 0.2.0 → 1.0.0; Tag `1.0.0` löst Template-CI (macOS/Windows/Ubuntu) +
       Draft-Release mit Downloads aus. README aktualisiert.
+- [x] **Phase 5 — Release v1.1.0** ✅ (2026-06-12)
+      Studio-Modus-Doppelklick (Preview→Programm), Suchfeld (ein-/ausblendbar),
+      Ordner-Szenenzähler, externer Rename-Sync (`source_rename`-Signal),
+      **OBS-Szenenreihenfolge immer angeglichen** (kein Schalter), Duplizieren
+      refs/Kopien, Farbpaletten-Picker, **Im Multiview anzeigen** im Kontextmenü
+      (`show_in_multiview`-Flag + `scenesReordered`-Refresh). Modell in OBS-freie
+      `bsd-tree.cpp` + `bsd-model.cpp` getrennt → Unit-Tests (`tests/`, eigene
+      CI). CI-Housekeeping (Node-24-Opt-in). macOS-Notarisierung verworfen (kein
+      Apple-Dev-Account). Tag `1.1.0`.
 
 ---
 
 ## 5. Risiken & offene Punkte
 
-1. **Reihenfolge**: Das Dock zeigt die Baum-Reihenfolge, nicht OBS' `scene_order`.
-   Für Multiview/andere Plugins bleibt OBS' Reihenfolge maßgeblich. Ggf. in Phase 2
-   optional die OBS-Reihenfolge an die Dock-Reihenfolge angleichen.
-2. **Externe Umbenennung**: Eine außerhalb des Docks umbenannte Szene erscheint als
-   „entfernt + neu" und verliert ihre Ordner-Zuordnung (v1-Limit; Phase 2 fixt das
-   über das `rename`-Signal).
+1. ~~**Reihenfolge**~~: **Gelöst (v1.1)** — Dock-Reihenfolge wird per
+   `findChild<QListWidget>("scenes")` in OBS' (verstecktes) `SceneTree` gespiegelt;
+   `obs_frontend_get_scenes`, gespeicherte `scene_order` und Multiview lesen genau
+   daraus. Multiview-Refresh via `scenesReordered`-Signal.
+2. ~~**Externe Umbenennung**~~: **Gelöst (v1.1)** — globales `source_rename`-Signal
+   aktualisiert den Knoten in place (Ordner/Farbe bleiben erhalten).
 3. **Natives Dock ausgeblendet**: Wir verstecken `scenesDock` bei jedem Laden.
    Nutzer kann es über das Docks-Menü zurückholen; beim nächsten Start wieder weg.
-4. **OBS-Update-Risiko**: Hängt am Objektnamen `scenesDock` (Ausblenden). Bricht das,
-   laufen schlimmstenfalls beide Docks — unkritisch.
+4. **OBS-Update-Risiko**: Hängt an den Objektnamen `scenesDock` (Ausblenden) und
+   `scenes` (Reihenfolge-/Multiview-Sync). Bricht das, laufen schlimmstenfalls beide
+   Docks bzw. der Order-Sync wird stillschweigend zum No-op — unkritisch.
 
 ---
 
@@ -156,6 +166,18 @@ data/locale/{en-US,de-DE}.ini
   Spinbox, OBS-Default 300 ms), Szenen-Screenshot, Filter kopieren/einfügen
   (`obs_source_copy_filters`). Alle Signaturen gegen OBS 32.1.2 verifiziert. Vom
   Nutzer getestet & abgenommen → **Release v1.0.0** (Version gebumpt, Tag `1.0.0`).
+- **2026-06-12** — **V1.1.** Studio-Doppelklick (Preview→Programm), Suchfeld
+  (ein-/ausblendbar, Filter mit Ordner-Reveal), Ordner-Szenenzähler im Delegate,
+  externer Rename-Sync via globalem `source_rename`-Signal (auf GUI-Thread
+  gemarshallt), **immer aktive** OBS-Szenenreihenfolge-Spiegelung ins versteckte
+  `SceneTree` + Multiview-Refresh (`scenesReordered`), Duplizieren refs/Kopien
+  (Einstellung), Farbpaletten-Picker (Preset-Swatches + Custom/Clear), **Im
+  Multiview anzeigen** (`show_in_multiview`-Privat-Flag). Architektur: pure
+  Tree-Logik in `bsd-tree.cpp` (OBS-frei) ausgelagert → Header forward-declared
+  obs_data*, eigenständige Unit-Tests unter `tests/` (eigene `tests.yaml`-CI ohne
+  OBS-Deps). CI-Housekeeping: `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` in allen
+  Workflows. macOS-Notarisierung bewusst verworfen (kein bezahlter Apple-Account).
+  Vom Nutzer getestet → **Release v1.1.0** (Tag `1.1.0`).
 - *(Historie der Scene-Dividers-Phase: siehe git-Log vor diesem Commit.)*
 
 ---

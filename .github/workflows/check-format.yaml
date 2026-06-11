@@ -1,4 +1,7 @@
 name: Check Code Formatting 🛠️
+env:
+  # Opt the bundled JS actions into Node 24 (Node 20 is being deprecated).
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 on:
   workflow_call:
 jobs:

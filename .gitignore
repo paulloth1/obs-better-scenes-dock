@@ -18,6 +18,7 @@
 !/PROJEKT.md
 !/dev
 !/docs
+!/tests
 
 # Exclude lock files
 *.lock.json
@@ -30,3 +31,6 @@
 
 # Exclude isolated dev build output (dev/ fast path)
 /dev/build/
+
+# Exclude unit-test build output
+/tests/build/

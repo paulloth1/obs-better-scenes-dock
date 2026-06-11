@@ -1,5 +1,8 @@
 name: Dispatch
 run-name: Dispatched Repository Actions - ${{ inputs.job }} ⌛️
+env:
+  # Opt the bundled JS actions into Node 24 (Node 20 is being deprecated).
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 on:
   workflow_dispatch:
     inputs:

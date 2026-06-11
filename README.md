@@ -11,16 +11,22 @@ scenes, folders and dividers.
 ## Features
 
 - Replaces the native Scenes dock with a tree view
-- Click a scene to switch to it (sets the preview scene in Studio Mode)
-- Nested, collapsible **folders**
+- Click a scene to switch to it; in **Studio Mode** a click sets preview and a
+  double-click transitions it to program
+- Nested, collapsible **folders** with a scene-count badge
 - Labeled **dividers** (lines with optional text)
-- **Colors** for scenes, folders and dividers
+- **Colors** for scenes, folders and dividers, with a preset palette picker
 - Current program scene (red) / preview scene (green) indicators
+- **Search box** to filter scenes (can be hidden via Options)
 - Bottom **toolbar**: add (scene / folder / divider), remove, set color, open
-  scene filters, and reorder up/down
-- Full right-click **scene menu** matching the native dock: rename, duplicate,
-  scene projector (windowed / per-monitor fullscreen), transition override (with
-  duration), save scene screenshot, copy/paste filters
+  scene filters, reorder up/down, and an Options menu
+- Full right-click **scene menu** matching the native dock: rename, duplicate
+  (refs or full copies), scene projector (windowed / per-monitor fullscreen),
+  transition override (with duration), save scene screenshot, show in multiview,
+  copy/paste filters
+- The dock order is **kept in sync with OBS' scene list**, so Multiview and
+  other tools follow what you see
+- Renaming a scene anywhere (even outside the dock) keeps its folder & color
 - Structure persists per scene collection
 
 ## How it works
@@ -29,7 +35,9 @@ The dock renders a plugin-owned tree where scene entries reference real OBS
 scenes by name. Folders and dividers are pure plugin metadata stored per scene
 collection in the plugin's config directory. Switching scenes uses the official
 OBS frontend API, and the native `scenesDock` is hidden on load so this dock
-takes its place (you can bring the native one back from the Docks menu).
+takes its place (you can bring the native one back from the Docks menu). The
+flattened scene order is mirrored back into OBS' own scene list so Multiview and
+anything else reading the scene order stays consistent with the dock.
 
 ## Installation
 

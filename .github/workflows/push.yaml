@@ -1,5 +1,8 @@
 name: Push
 run-name: ${{ github.ref_name }} push run 🚀
+env:
+  # Opt the bundled JS actions into Node 24 (Node 20 is being deprecated).
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 on:
   push:
     branches:

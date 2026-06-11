@@ -10,6 +10,7 @@ the Free Software Foundation; either version 2 of the License, or
 
 #include "bsd-model.hpp"
 
+#include <obs.h>
 #include <obs-frontend-api.h>
 #include <obs-module.h>
 #include <plugin-support.h>
@@ -19,157 +20,9 @@ the Free Software Foundation; either version 2 of the License, or
 
 namespace bsd {
 
-static std::string gen_id(const char *prefix)
-{
-	/* Unique-enough id for folders/dividers: prefix + high-res time. */
-	char buf[64];
-	snprintf(buf, sizeof(buf), "%s_%llx", prefix, (unsigned long long)os_gettime_ns());
-	return buf;
-}
-
-/* ---- tree walking ------------------------------------------------------- */
-
-static Node *find_in(Node &n, const std::string &id)
-{
-	if (n.id == id && n.type != NodeType::Root)
-		return &n;
-	for (auto &c : n.children) {
-		if (Node *hit = find_in(*c, id))
-			return hit;
-	}
-	return nullptr;
-}
-
-Node *Model::find(const std::string &id)
-{
-	return find_in(root, id);
-}
-
-static Node *find_parent_in(Node &n, const Node *child)
-{
-	for (auto &c : n.children) {
-		if (c.get() == child)
-			return &n;
-		if (Node *hit = find_parent_in(*c, child))
-			return hit;
-	}
-	return nullptr;
-}
-
-Node *Model::find_parent(const Node *child)
-{
-	return find_parent_in(root, child);
-}
-
-/* ---- structural edits --------------------------------------------------- */
-
-Node *Model::add_folder(Node *parent, const std::string &name)
-{
-	if (!parent || !parent->is_container())
-		parent = &root;
-	auto node = std::make_unique<Node>();
-	node->type = NodeType::Folder;
-	node->id = gen_id("f");
-	node->name = name.empty() ? "Folder" : name;
-	Node *ret = node.get();
-	parent->children.push_back(std::move(node));
-	return ret;
-}
-
-Node *Model::add_divider(Node *parent, const std::string &name)
-{
-	if (!parent || !parent->is_container())
-		parent = &root;
-	auto node = std::make_unique<Node>();
-	node->type = NodeType::Divider;
-	node->id = gen_id("d");
-	node->name = name;
-	Node *ret = node.get();
-	parent->children.push_back(std::move(node));
-	return ret;
-}
-
-bool Model::remove_node(Node *node)
-{
-	if (!node || node->type == NodeType::Root)
-		return false;
-	Node *parent = find_parent(node);
-	if (!parent)
-		return false;
-
-	/* When removing a folder, lift its scene/sub nodes into the parent so
-	 * no real scene silently disappears from the dock. */
-	std::vector<std::unique_ptr<Node>> rescued;
-	for (auto &c : node->children)
-		rescued.push_back(std::move(c));
-
-	auto &siblings = parent->children;
-	for (auto it = siblings.begin(); it != siblings.end(); ++it) {
-		if (it->get() == node) {
-			it = siblings.erase(it);
-			for (auto &r : rescued)
-				it = siblings.insert(it, std::move(r)) + 1;
-			return true;
-		}
-	}
-	return false;
-}
-
-bool Model::move_node(Node *node, Node *newParent, int index)
-{
-	if (!node || node->type == NodeType::Root)
-		return false;
-	if (!newParent || !newParent->is_container())
-		newParent = &root;
-	/* Disallow moving a folder into its own subtree. */
-	for (Node *p = newParent; p; p = find_parent(p)) {
-		if (p == node)
-			return false;
-	}
-	Node *oldParent = find_parent(node);
-	if (!oldParent)
-		return false;
-
-	std::unique_ptr<Node> owned;
-	auto &src = oldParent->children;
-	for (auto it = src.begin(); it != src.end(); ++it) {
-		if (it->get() == node) {
-			owned = std::move(*it);
-			src.erase(it);
-			break;
-		}
-	}
-	if (!owned)
-		return false;
-
-	auto &dst = newParent->children;
-	if (index < 0 || index > (int)dst.size())
-		index = (int)dst.size();
-	dst.insert(dst.begin() + index, std::move(owned));
-	return true;
-}
-
-bool Model::move_within_parent(Node *node, int delta)
-{
-	if (!node || node->type == NodeType::Root || delta == 0)
-		return false;
-	Node *parent = find_parent(node);
-	if (!parent)
-		return false;
-	auto &ch = parent->children;
-	int idx = -1;
-	for (int i = 0; i < (int)ch.size(); i++) {
-		if (ch[i].get() == node) {
-			idx = i;
-			break;
-		}
-	}
-	const int target = idx + delta;
-	if (idx < 0 || target < 0 || target >= (int)ch.size())
-		return false;
-	std::swap(ch[idx], ch[target]);
-	return true;
-}
+/* Pure tree lookup/editing lives in bsd-tree.cpp (no OBS dependency). This file
+ * holds the OBS-aware parts: reconciling against the real scene list and JSON
+ * persistence. */
 
 /* ---- reconcile with the real OBS scene list ----------------------------- */
 

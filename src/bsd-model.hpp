@@ -10,11 +10,17 @@ the Free Software Foundation; either version 2 of the License, or
 
 #pragma once
 
-#include <obs.h>
-
 #include <memory>
 #include <string>
 #include <vector>
+
+/* Forward-declare the few OBS data types used in the persistence signatures so
+ * the pure tree logic (bsd-tree.cpp) and its unit tests can use this header
+ * without the OBS SDK. bsd-model.cpp includes <obs.h> for the real types. */
+struct obs_data;
+struct obs_data_array;
+typedef struct obs_data obs_data_t;
+typedef struct obs_data_array obs_data_array_t;
 
 namespace bsd {
 

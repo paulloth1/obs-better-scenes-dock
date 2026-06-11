@@ -108,6 +108,7 @@ add_library(
   ${PROJECT_NAME}
   MODULE
   "${CMAKE_CURRENT_SOURCE_DIR}/../src/plugin-main.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../src/bsd-tree.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/../src/bsd-model.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/../src/bsd-dock.cpp"
   "${CMAKE_CURRENT_BINARY_DIR}/plugin-support.c"
