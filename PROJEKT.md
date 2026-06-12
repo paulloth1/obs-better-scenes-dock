@@ -5,7 +5,7 @@
 > plus verschachtelbare **Ordner**, einklappbare **Trenner** und **Farben** für
 > Szenen, Ordner und Trenner.
 
-Letzte Aktualisierung: 2026-06-12 · v1.2.0 · GitHub-Repo: **github.com/paulloth1/obs-better-scenes-dock** (öffentlich)
+Letzte Aktualisierung: 2026-06-12 · v1.2.1 · GitHub-Repo: **github.com/paulloth1/obs-better-scenes-dock** (öffentlich)
 
 ---
 
@@ -188,6 +188,14 @@ data/locale/{en-US,de-DE}.ini
   „Neue Szene" landet im rechtsgeklickten Ordner. #10: Indikator-Punkte an Szenen
   (Filter = teal `obs_source_filter_count`, Übergangs-Override = amber Private-Setting
   `transition`), Refresh nach Override/Paste-Filters. Tag `1.2.0`.
+- **2026-06-12** — **V1.2.1 (Bugfixes).** Übergangs-Override-Dauer: Spinbox war im
+  Menü kaputt (QWidget+Layout-Wrapper) → jetzt bare QSpinBox mit Prefix/Suffix wie
+  nativ. macOS-Tastatur: `QShortcut`+`Qt::CTRL` mappte auf ⌘ und `Delete` ≠ Mac-
+  Backspace → durch `eventFilter` auf `tree_` ersetzt (akzeptiert Ctrl **und** ⌘ für
+  ↑/↓, Delete **und** Backspace; Szenen-Löschen weiterhin mit Bestätigung). Such-
+  Collapse: `setExpanded` beim Filtern feuerte `itemExpanded` → Modell-`collapsed`
+  wurde überschrieben; jetzt mit `updating_` geschützt. Vom Nutzer getestet → Tag
+  `1.2.1`.
 - *(Historie der Scene-Dividers-Phase: siehe git-Log vor diesem Commit.)*
 
 ---

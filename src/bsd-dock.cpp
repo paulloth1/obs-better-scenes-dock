@@ -36,12 +36,10 @@ the Free Software Foundation; either version 2 of the License, or
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QInputDialog>
-#include <QKeySequence>
-#include <QLabel>
+#include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QScreen>
-#include <QShortcut>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QWidgetAction>
@@ -265,14 +263,7 @@ public:
 		tree_->setContextMenuPolicy(Qt::CustomContextMenu);
 		delegate_ = new ItemDelegate(tree_);
 		tree_->setItemDelegate(delegate_);
-
-		addShortcut(QKeySequence(Qt::Key_F2), [this]() {
-			if (Node *n = selectedNode())
-				renameNode(n);
-		});
-		addShortcut(QKeySequence::Delete, [this]() { removeSelected(); });
-		addShortcut(QKeySequence(Qt::CTRL | Qt::Key_Up), [this]() { moveSelected(-1); });
-		addShortcut(QKeySequence(Qt::CTRL | Qt::Key_Down), [this]() { moveSelected(+1); });
+		tree_->installEventFilter(this); // F2 / Delete+Backspace / Ctrl|Cmd+Up/Down
 
 		auto *toolbar = buildToolbar();
 
@@ -380,11 +371,40 @@ private:
 
 	void save() { model_.save_for_collection(collection_); }
 
-	template<typename Fn> void addShortcut(const QKeySequence &keys, Fn fn)
+	/* Keyboard handling on the tree. Uses an event filter (not QShortcut) so it
+	 * works reliably on macOS, where Qt maps Qt::CTRL to ⌘ and the "delete" key
+	 * is Backspace — we accept both Ctrl and ⌘, and both Delete and Backspace. */
+	bool eventFilter(QObject *obj, QEvent *event) override
 	{
-		auto *s = new QShortcut(keys, tree_);
-		s->setContext(Qt::WidgetShortcut);
-		connect(s, &QShortcut::activated, this, fn);
+		if (obj == tree_ && event->type() == QEvent::KeyPress) {
+			auto *ke = static_cast<QKeyEvent *>(event);
+			const bool ctrlOrCmd = ke->modifiers() & (Qt::ControlModifier | Qt::MetaModifier);
+			switch (ke->key()) {
+			case Qt::Key_F2:
+				if (Node *n = selectedNode())
+					renameNode(n);
+				return true;
+			case Qt::Key_Delete:
+			case Qt::Key_Backspace:
+				removeSelected(); // scenes confirm before deleting
+				return true;
+			case Qt::Key_Up:
+				if (ctrlOrCmd) {
+					moveSelected(-1);
+					return true;
+				}
+				break;
+			case Qt::Key_Down:
+				if (ctrlOrCmd) {
+					moveSelected(+1);
+					return true;
+				}
+				break;
+			default:
+				break;
+			}
+		}
+		return QWidget::eventFilter(obj, event);
 	}
 
 	/* ---- selection memory (persisted per collection) ---- */
@@ -467,10 +487,15 @@ private:
 	{
 		const QString q = query.trimmed();
 		delegate_->setQuery(q); // highlight matches
+		/* Guard so the expand/collapse we do here doesn't fire itemExpanded/
+		 * itemCollapsed and overwrite the user's saved collapse state. */
+		const bool prev = updating_;
+		updating_ = true;
 		for (int i = 0; i < tree_->topLevelItemCount(); i++)
 			filterItem(tree_->topLevelItem(i), q, false);
 		if (q.isEmpty())
 			restoreExpansion(); // searching force-expanded folders; put them back
+		updating_ = prev;
 		tree_->viewport()->update();
 	}
 
@@ -1051,22 +1076,20 @@ private:
 
 		QMenu *sub = menu.addMenu(obs_module_text("BSD.TransitionOverride"));
 
-		/* Embedded duration spinbox (same as OBS' native per-scene menu). */
-		auto *durRow = new QWidget(sub);
-		auto *durLayout = new QHBoxLayout(durRow);
-		durLayout->setContentsMargins(8, 2, 8, 2);
-		durLayout->addWidget(new QLabel(obs_module_text("BSD.Duration"), durRow));
-		auto *durSpin = new QSpinBox(durRow);
+		/* Embedded duration spinbox (a bare spinbox, exactly like OBS' native
+		 * per-scene menu — wrapping it in a layout broke its rendering). */
+		auto *durSpin = new QSpinBox(sub);
 		durSpin->setMinimum(50);
 		durSpin->setMaximum(20000);
 		durSpin->setSingleStep(50);
+		durSpin->setMinimumWidth(140);
+		durSpin->setPrefix(QString(obs_module_text("BSD.Duration")) + QStringLiteral(" "));
 		durSpin->setSuffix(QStringLiteral(" ms"));
 		durSpin->setValue(curDuration);
 		connect(durSpin, &QSpinBox::valueChanged, this,
 			[this, sceneName](int v) { setTransitionDuration(sceneName, v); });
-		durLayout->addWidget(durSpin);
 		auto *durAction = new QWidgetAction(sub);
-		durAction->setDefaultWidget(durRow);
+		durAction->setDefaultWidget(durSpin);
 		sub->addAction(durAction);
 		sub->addSeparator();
 
