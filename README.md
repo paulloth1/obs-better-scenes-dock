@@ -17,7 +17,10 @@ scenes, folders and dividers.
 - Labeled **dividers** (lines with optional text)
 - **Colors** for scenes, folders and dividers, with a preset palette picker
 - Current program scene (red) / preview scene (green) indicators
-- **Search box** to filter scenes (can be hidden via Options)
+- **Search box** to filter scenes with match highlighting (can be hidden via Options)
+- Small **indicator dots** on scenes that have filters or a transition override
+- **Keyboard shortcuts**: `F2` rename, `Delete` remove, `Ctrl+↑/↓` reorder
+- Collapse all / Expand all, and the last selected scene is remembered across restarts
 - Bottom **toolbar**: add (scene / folder / divider), remove, set color, open
   scene filters, reorder up/down, and an Options menu
 - Full right-click **scene menu** matching the native dock: rename, duplicate

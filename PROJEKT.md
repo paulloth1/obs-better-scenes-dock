@@ -5,7 +5,7 @@
 > plus verschachtelbare **Ordner**, einklappbare **Trenner** und **Farben** für
 > Szenen, Ordner und Trenner.
 
-Letzte Aktualisierung: 2026-06-12 · v1.1.0 · GitHub-Repo: **github.com/paulloth1/obs-better-scenes-dock** (öffentlich)
+Letzte Aktualisierung: 2026-06-12 · v1.2.0 · GitHub-Repo: **github.com/paulloth1/obs-better-scenes-dock** (öffentlich)
 
 ---
 
@@ -178,6 +178,16 @@ data/locale/{en-US,de-DE}.ini
   OBS-Deps). CI-Housekeeping: `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` in allen
   Workflows. macOS-Notarisierung bewusst verworfen (kein bezahlter Apple-Account).
   Vom Nutzer getestet → **Release v1.1.0** (Tag `1.1.0`).
+- **2026-06-12** — **V1.2 (Politur-Bundle).** Fixes: Such-Collapse-State wird beim
+  Leeren wiederhergestellt (`restoreExpansion`), `source_rename`-Disconnect gegen
+  null-Handler abgesichert, Ordner-Zähler-Badge kontraststärker (Text-Farbe @ alpha
+  150 statt Disabled). Adds: Tastenkürzel (F2/Entf/Strg+↑↓ via `QShortcut`,
+  `WidgetShortcut`-Kontext), Alle ein-/ausklappen (Kontextmenü), zuletzt gewählte
+  Szene wird pro Collection in `settings.json` gemerkt + wiederhergestellt, Such-
+  Treffer-Highlight (Delegate `setQuery`, translucenter Marker via `subElementRect`),
+  „Neue Szene" landet im rechtsgeklickten Ordner. #10: Indikator-Punkte an Szenen
+  (Filter = teal `obs_source_filter_count`, Übergangs-Override = amber Private-Setting
+  `transition`), Refresh nach Override/Paste-Filters. Tag `1.2.0`.
 - *(Historie der Scene-Dividers-Phase: siehe git-Log vor diesem Commit.)*
 
 ---

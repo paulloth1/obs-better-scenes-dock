@@ -27,6 +27,7 @@ the Free Software Foundation; either version 2 of the License, or
 #include <plugin-support.h>
 #include <util/platform.h>
 
+#include <QApplication>
 #include <QColor>
 #include <QColorDialog>
 #include <QConicalGradient>
@@ -35,10 +36,12 @@ the Free Software Foundation; either version 2 of the License, or
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QInputDialog>
+#include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QScreen>
+#include <QShortcut>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QWidgetAction>
@@ -56,6 +59,7 @@ the Free Software Foundation; either version 2 of the License, or
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -67,7 +71,10 @@ enum {
 	NodeColorRole,
 	NodeStateRole, // 0 none, 1 program, 2 preview
 	NodeCountRole, // folders: number of scene descendants
+	NodeFlagsRole, // scenes: bit0 has filters, bit1 has transition override
 };
+
+enum SceneFlag { FlagFilters = 1 << 0, FlagOverride = 1 << 1 };
 
 /* Plugin-wide preferences (global, not per scene collection). */
 struct Settings {
@@ -106,6 +113,8 @@ static std::string current_collection()
 class ItemDelegate : public QStyledItemDelegate {
 public:
 	using QStyledItemDelegate::QStyledItemDelegate;
+
+	void setQuery(const QString &q) { query_ = q.trimmed(); }
 
 	void paint(QPainter *p, const QStyleOptionViewItem &option, const QModelIndex &index) const override
 	{
@@ -155,6 +164,26 @@ public:
 		}
 		QStyledItemDelegate::paint(p, opt, index);
 
+		/* Search highlight: a translucent "highlighter" run over the match. */
+		if (!query_.isEmpty()) {
+			const QString full = index.data(Qt::DisplayRole).toString();
+			QStyleOptionViewItem o2 = option;
+			initStyleOption(&o2, index);
+			const QWidget *w = o2.widget;
+			QStyle *st = w ? w->style() : QApplication::style();
+			const QRect tr = st->subElementRect(QStyle::SE_ItemViewItemText, &o2, w);
+			const QFontMetrics fm(opt.font);
+			const QString elided = fm.elidedText(full, option.textElideMode, tr.width());
+			const int mi = elided.indexOf(query_, 0, Qt::CaseInsensitive);
+			if (mi >= 0) {
+				const int x0 = tr.left() + fm.horizontalAdvance(elided.left(mi));
+				const int wMatch = fm.horizontalAdvance(elided.mid(mi, query_.length()));
+				p->save();
+				p->fillRect(QRect(x0, tr.top(), wMatch, tr.height()), QColor(0xF2, 0xC4, 0x3D, 90));
+				p->restore();
+			}
+		}
+
 		/* Left accent bar: program red, preview green, else node color. */
 		QColor bar;
 		if (state == 1)
@@ -169,18 +198,48 @@ public:
 			p->restore();
 		}
 
-		/* Folder scene-count badge, right-aligned and muted. */
+		const bool selected = option.state & QStyle::State_Selected;
+
+		/* Folder scene-count badge, right-aligned. */
 		if (type == (int)NodeType::Folder) {
 			const int count = index.data(NodeCountRole).toInt();
 			if (count > 0) {
+				QColor c = option.palette.color(selected ? QPalette::HighlightedText : QPalette::Text);
+				c.setAlpha(150);
 				p->save();
-				p->setPen(option.palette.color(QPalette::Disabled, QPalette::Text));
+				p->setPen(c);
 				p->drawText(option.rect.adjusted(0, 0, -8, 0), Qt::AlignRight | Qt::AlignVCenter,
 					    QString::number(count));
 				p->restore();
 			}
 		}
+
+		/* Scene indicator dots: filters (teal) and transition override (amber). */
+		if (type == (int)NodeType::Scene) {
+			const int flags = index.data(NodeFlagsRole).toInt();
+			if (flags) {
+				p->save();
+				p->setRenderHint(QPainter::Antialiasing, true);
+				p->setPen(Qt::NoPen);
+				const int r = 3;
+				int cx = option.rect.right() - 8;
+				const int cy = option.rect.center().y();
+				if (flags & FlagOverride) {
+					p->setBrush(QColor(0xF2, 0xC4, 0x3D));
+					p->drawEllipse(QPoint(cx, cy), r, r);
+					cx -= 2 * r + 3;
+				}
+				if (flags & FlagFilters) {
+					p->setBrush(QColor(0x1A, 0xBC, 0x9C));
+					p->drawEllipse(QPoint(cx, cy), r, r);
+				}
+				p->restore();
+			}
+		}
 	}
+
+private:
+	QString query_;
 };
 
 /* ----------------------------------------------------------------------- */
@@ -204,7 +263,16 @@ public:
 		tree_->setExpandsOnDoubleClick(true);
 		tree_->setSelectionMode(QAbstractItemView::SingleSelection);
 		tree_->setContextMenuPolicy(Qt::CustomContextMenu);
-		tree_->setItemDelegate(new ItemDelegate(tree_));
+		delegate_ = new ItemDelegate(tree_);
+		tree_->setItemDelegate(delegate_);
+
+		addShortcut(QKeySequence(Qt::Key_F2), [this]() {
+			if (Node *n = selectedNode())
+				renameNode(n);
+		});
+		addShortcut(QKeySequence::Delete, [this]() { removeSelected(); });
+		addShortcut(QKeySequence(Qt::CTRL | Qt::Key_Up), [this]() { moveSelected(-1); });
+		addShortcut(QKeySequence(Qt::CTRL | Qt::Key_Down), [this]() { moveSelected(+1); });
 
 		auto *toolbar = buildToolbar();
 
@@ -224,7 +292,10 @@ public:
 			[this](QTreeWidgetItem *it) { setCollapsed(it, true); });
 		connect(tree_, &QTreeWidget::customContextMenuRequested, this,
 			[this](const QPoint &pos) { showMenu(pos); });
-		connect(tree_, &QTreeWidget::itemSelectionChanged, this, [this]() { updateToolbar(); });
+		connect(tree_, &QTreeWidget::itemSelectionChanged, this, [this]() {
+			updateToolbar();
+			recordSelection();
+		});
 
 		/* Keep folder placement when a scene is renamed outside the dock. */
 		signal_handler_connect(obs_get_signal_handler(), "source_rename", &BetterScenesDock::onSourceRename,
@@ -234,6 +305,7 @@ public:
 		model_.load_for_collection(collection_);
 		model_.reconcile_with_obs();
 		rebuild();
+		restoreSelection();
 		updateToolbar();
 		applySearchVisibility();
 		hideNativeDock();
@@ -241,8 +313,8 @@ public:
 
 	~BetterScenesDock() override
 	{
-		signal_handler_disconnect(obs_get_signal_handler(), "source_rename", &BetterScenesDock::onSourceRename,
-					  this);
+		if (signal_handler_t *sh = obs_get_signal_handler())
+			signal_handler_disconnect(sh, "source_rename", &BetterScenesDock::onSourceRename, this);
 	}
 
 	void onFrontendEvent(enum obs_frontend_event event)
@@ -252,6 +324,7 @@ public:
 			hideNativeDock();
 			model_.reconcile_with_obs();
 			rebuild();
+			restoreSelection();
 			break;
 		case OBS_FRONTEND_EVENT_SCENE_LIST_CHANGED:
 			if (model_.reconcile_with_obs()) {
@@ -269,15 +342,18 @@ public:
 			break;
 		case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGING:
 			save();
+			persistSelection();
 			break;
 		case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED:
 			collection_ = current_collection();
 			model_.load_for_collection(collection_);
 			model_.reconcile_with_obs();
 			rebuild();
+			restoreSelection();
 			break;
 		case OBS_FRONTEND_EVENT_EXIT:
 			save();
+			persistSelection();
 			break;
 		default:
 			break;
@@ -287,6 +363,7 @@ public:
 private:
 	QTreeWidget *tree_;
 	QLineEdit *search_ = nullptr;
+	ItemDelegate *delegate_ = nullptr;
 	QToolButton *addBtn_ = nullptr;
 	QToolButton *removeBtn_ = nullptr;
 	QToolButton *colorBtn_ = nullptr;
@@ -297,10 +374,39 @@ private:
 	Model model_;
 	Settings settings_;
 	std::string collection_;
-	std::string copiedFiltersSource_; // scene whose filters were last copied
+	std::string copiedFiltersSource_;                 // scene whose filters were last copied
+	std::map<std::string, std::string> lastSelected_; // collection -> last selected node id
 	bool updating_ = false;
 
 	void save() { model_.save_for_collection(collection_); }
+
+	template<typename Fn> void addShortcut(const QKeySequence &keys, Fn fn)
+	{
+		auto *s = new QShortcut(keys, tree_);
+		s->setContext(Qt::WidgetShortcut);
+		connect(s, &QShortcut::activated, this, fn);
+	}
+
+	/* ---- selection memory (persisted per collection) ---- */
+
+	void recordSelection()
+	{
+		if (Node *n = selectedNode())
+			lastSelected_[collection_] = n->id;
+	}
+
+	void restoreSelection()
+	{
+		auto it = lastSelected_.find(collection_);
+		if (it != lastSelected_.end())
+			selectNodeById(it->second);
+	}
+
+	void persistSelection()
+	{
+		recordSelection();
+		saveSettings();
+	}
 
 	/* ---- settings persistence (own JSON in the module config dir) ---- */
 
@@ -316,6 +422,11 @@ private:
 		obs_data_set_default_bool(d, "show_search", true);
 		settings_.showSearch = obs_data_get_bool(d, "show_search");
 		settings_.duplicateCopies = obs_data_get_bool(d, "duplicate_copies");
+		if (obs_data_t *sel = obs_data_get_obj(d, "selection")) {
+			for (obs_data_item_t *it = obs_data_first(sel); it; obs_data_item_next(&it))
+				lastSelected_[obs_data_item_get_name(it)] = obs_data_item_get_string(it);
+			obs_data_release(sel);
+		}
 		obs_data_release(d);
 	}
 
@@ -331,6 +442,11 @@ private:
 		obs_data_t *d = obs_data_create();
 		obs_data_set_bool(d, "show_search", settings_.showSearch);
 		obs_data_set_bool(d, "duplicate_copies", settings_.duplicateCopies);
+		obs_data_t *sel = obs_data_create();
+		for (const auto &[coll, id] : lastSelected_)
+			obs_data_set_string(sel, coll.c_str(), id.c_str());
+		obs_data_set_obj(d, "selection", sel);
+		obs_data_release(sel);
 		obs_data_save_json(d, path);
 		obs_data_release(d);
 		bfree(path);
@@ -350,8 +466,12 @@ private:
 	void filterTree(const QString &query)
 	{
 		const QString q = query.trimmed();
+		delegate_->setQuery(q); // highlight matches
 		for (int i = 0; i < tree_->topLevelItemCount(); i++)
 			filterItem(tree_->topLevelItem(i), q, false);
+		if (q.isEmpty())
+			restoreExpansion(); // searching force-expanded folders; put them back
+		tree_->viewport()->update();
 	}
 
 	/* Returns true if the item (or a descendant) is visible. `force` keeps a
@@ -373,6 +493,18 @@ private:
 		if (!empty && type == (int)NodeType::Folder && (childMatch || childForce))
 			item->setExpanded(true);
 		return visible;
+	}
+
+	/* Re-apply each folder's saved collapsed state (search expands to reveal). */
+	void restoreExpansion()
+	{
+		QTreeWidgetItemIterator it(tree_);
+		for (; *it; ++it) {
+			if ((*it)->data(0, NodeTypeRole).toInt() != (int)NodeType::Folder)
+				continue;
+			if (Node *n = model_.find((*it)->data(0, NodeIdRole).toString().toStdString()))
+				(*it)->setExpanded(!n->collapsed);
+		}
 	}
 
 	/* ---- toolbar ---- */
@@ -451,7 +583,7 @@ private:
 		/* No drop-down arrow next to the glyph. */
 		addBtn_->setStyleSheet(QStringLiteral("QToolButton::menu-indicator { image: none; }"));
 		auto *addMenu = new QMenu(addBtn_);
-		addMenu->addAction(obs_module_text("BSD.NewScene"), this, [this]() { newScene(); });
+		addMenu->addAction(obs_module_text("BSD.NewScene"), this, [this]() { newScene(selectedNode()); });
 		addMenu->addAction(obs_module_text("BSD.NewFolder"), this, [this]() { newFolder(selectedNode()); });
 		addMenu->addAction(obs_module_text("BSD.NewDivider"), this, [this]() { newDivider(selectedNode()); });
 		addBtn_->setMenu(addMenu);
@@ -597,6 +729,8 @@ private:
 		item->setData(0, NodeTypeRole, (int)n.type);
 		item->setData(0, NodeColorRole, QString::fromStdString(n.color));
 		item->setText(0, QString::fromStdString(n.name));
+		if (n.type == NodeType::Scene)
+			item->setData(0, NodeFlagsRole, sceneFlags(n.name));
 
 		/* Dividers are selectable too (so they can be moved / colored /
 		 * removed via the toolbar); clicking one just never switches a
@@ -615,6 +749,33 @@ private:
 				addNode(*c, item);
 			item->setExpanded(!n.collapsed);
 		}
+	}
+
+	/* Indicator flags for a scene: has filters / has a transition override. */
+	int sceneFlags(const std::string &name)
+	{
+		int flags = 0;
+		if (obs_source_t *s = obs_get_source_by_name(name.c_str())) {
+			if (obs_source_filter_count(s) > 0)
+				flags |= FlagFilters;
+			obs_data_t *d = obs_source_get_private_settings(s);
+			if (obs_data_get_string(d, "transition") && *obs_data_get_string(d, "transition"))
+				flags |= FlagOverride;
+			obs_data_release(d);
+			obs_source_release(s);
+		}
+		return flags;
+	}
+
+	/* Re-read the filter/override indicator flags for every scene row. */
+	void refreshSceneFlags()
+	{
+		QTreeWidgetItemIterator it(tree_);
+		for (; *it; ++it) {
+			if ((*it)->data(0, NodeTypeRole).toInt() == (int)NodeType::Scene)
+				(*it)->setData(0, NodeFlagsRole, sceneFlags((*it)->text(0).toStdString()));
+		}
+		tree_->viewport()->update();
 	}
 
 	QListWidget *nativeSceneList()
@@ -779,6 +940,7 @@ private:
 		Node *n = nodeOf(item);
 		QMenu menu;
 
+		menu.addAction(obs_module_text("BSD.NewScene"), this, [this, n]() { newScene(n); });
 		menu.addAction(obs_module_text("BSD.NewFolder"), this, [this, n]() { newFolder(n); });
 		menu.addAction(obs_module_text("BSD.NewDivider"), this, [this, n]() { newDivider(n); });
 
@@ -798,7 +960,30 @@ private:
 			menu.addSeparator();
 			menu.addAction(obs_module_text("BSD.Remove"), this, [this, n]() { removeNode(n); });
 		}
+
+		menu.addSeparator();
+		menu.addAction(obs_module_text("BSD.ExpandAll"), this, [this]() { setAllCollapsed(false); });
+		menu.addAction(obs_module_text("BSD.CollapseAll"), this, [this]() { setAllCollapsed(true); });
+
 		menu.exec(tree_->viewport()->mapToGlobal(pos));
+	}
+
+	/* Collapse or expand every folder (updates the model + tree). */
+	void setAllCollapsed(bool collapsed)
+	{
+		setAllCollapsedIn(model_.root, collapsed);
+		save();
+		rebuild();
+	}
+
+	void setAllCollapsedIn(Node &n, bool collapsed)
+	{
+		for (auto &c : n.children) {
+			if (c->type == NodeType::Folder)
+				c->collapsed = collapsed;
+			if (c->is_container())
+				setAllCollapsedIn(*c, collapsed);
+		}
 	}
 
 	/* Scene-only entries: duplicate, projector, transition override, screenshot,
@@ -912,6 +1097,7 @@ private:
 		obs_data_set_string(data, "transition", transition.c_str());
 		obs_data_release(data);
 		obs_source_release(scene);
+		refreshSceneFlags(); // override indicator may have changed
 	}
 
 	void setTransitionDuration(const std::string &sceneName, int duration)
@@ -935,6 +1121,7 @@ private:
 			obs_source_copy_filters(dst, src);
 		obs_source_release(src);
 		obs_source_release(dst);
+		refreshSceneFlags(); // target may now have filters
 	}
 
 	void duplicateScene(Node *n)
@@ -1159,7 +1346,9 @@ private:
 		}
 	}
 
-	void newScene()
+	/* `context` is the right-clicked / selected node: a folder receives the new
+	 * scene inside it, otherwise it lands right after the context node. */
+	void newScene(Node *context)
 	{
 		bool ok = false;
 		const QString input = QInputDialog::getText(this, obs_module_text("BSD.NewScene"),
@@ -1177,18 +1366,20 @@ private:
 			return;
 		obs_scene_release(scene);
 
-		/* Pull the new scene into the model now (the frontend event is
-		 * queued) and place it right after the current selection. */
+		/* Pull the new scene into the model now (the frontend event is queued)
+		 * and place it relative to the context node. */
 		model_.reconcile_with_obs();
-		if (Node *sel = selectedNode()) {
+		if (context) {
 			Node *newNode = model_.find(name);
-			Node *parent = sel->is_container() ? sel : model_.find_parent(sel);
+			Node *parent = context->is_container() ? context : model_.find_parent(context);
 			if (newNode && parent) {
 				int idx = (int)parent->children.size();
-				for (int i = 0; i < (int)parent->children.size(); i++) {
-					if (parent->children[i].get() == sel) {
-						idx = i + 1;
-						break;
+				if (!context->is_container()) {
+					for (int i = 0; i < (int)parent->children.size(); i++) {
+						if (parent->children[i].get() == context) {
+							idx = i + 1;
+							break;
+						}
 					}
 				}
 				model_.move_node(newNode, parent, idx);
