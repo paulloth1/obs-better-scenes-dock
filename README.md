@@ -44,16 +44,53 @@ anything else reading the scene order stays consistent with the dock.
 
 ## Installation
 
-Grab the build for your platform from the
-[Releases](https://github.com/paulloth1/obs-better-scenes-dock/releases) page
-(macOS, Windows and Linux are built by CI). On macOS, copy
-`better-scenes-dock.plugin` to:
+Requires **OBS Studio 32+**. Download the build for your platform from the
+[Releases](https://github.com/paulloth1/obs-better-scenes-dock/releases) page,
+then **fully quit and restart OBS** after installing. You'll find the
+**Better Scenes** dock in OBS (re-add it from *Docks → Better Scenes* if needed).
 
-```
-~/Library/Application Support/obs-studio/plugins/
+### Windows
+
+1. Download `better-scenes-dock-*-windows-x64.zip`.
+2. Open `%APPDATA%\obs-studio\plugins\` (paste that into the File Explorer
+   address bar; create the `plugins` folder if it doesn't exist).
+3. Extract the zip and copy the `better-scenes-dock` folder into that
+   `plugins` folder, so you end up with:
+
+   ```
+   %APPDATA%\obs-studio\plugins\better-scenes-dock\bin\64bit\better-scenes-dock.dll
+   %APPDATA%\obs-studio\plugins\better-scenes-dock\data\
+   ```
+
+4. Restart OBS.
+
+### Linux (Debian / Ubuntu)
+
+For a system (apt/`.deb`) install of OBS:
+
+```bash
+sudo apt install ./better-scenes-dock-*-x86_64-linux-gnu.deb
 ```
 
-Requires OBS Studio 32+.
+This installs the plugin to `/usr/lib/x86_64-linux-gnu/obs-plugins/`. Restart OBS.
+
+> **Flatpak OBS** uses a sandbox, so the `.deb` won't be picked up. Extract the
+> plugin from the `.deb` and place it under
+> `~/.var/app/com.obsproject.Studio/config/obs-studio/plugins/better-scenes-dock/`
+> with `bin/64bit/better-scenes-dock.so` and the `data/` folder, then restart OBS.
+
+### macOS
+
+The build is **not notarized** (no paid Apple Developer account), so macOS will
+warn the first time.
+
+1. Download `better-scenes-dock-*-macos-universal.pkg`.
+2. **Right-click the `.pkg` → Open** (don't double-click) and confirm, or after a
+   blocked attempt allow it under *System Settings → Privacy & Security*.
+3. Complete the installer, then restart OBS.
+
+If you build from source instead, copy `better-scenes-dock.plugin` to
+`~/Library/Application Support/obs-studio/plugins/`.
 
 ## Building
 
